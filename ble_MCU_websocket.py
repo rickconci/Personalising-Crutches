@@ -4,6 +4,14 @@ import struct
 import csv
 from datetime import datetime
 
+import json
+import time
+import asyncio
+from websockets import serve
+
+# Set of connected WebSocket clients
+clients = set()
+
 # UUID for the characteristic to which we write and read data
 CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'
 
@@ -11,10 +19,11 @@ CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'
 NUM_FLOATS_TO_SEND = 8  # Change this to any number you want
 
 async def run():
-
     target_device_name_fragment = "HIP_EXO_V2"
-
     print("Scanning for Bluetooth devices...")
+    # Start WebSocket server for broadcasting ble_MCU data
+    ws_server = await serve(websocket_handler, 'localhost', 8765)
+    print("WebSocket server listening at ws://localhost:8765")
     devices = await BleakScanner.discover()
 
     target_device_address = None
@@ -37,11 +46,9 @@ async def run():
 
         while True:
             user_input = input("\nEnter the number of the device you want to connect to (or type 'exit' to quit): ").strip()
-            
             if user_input.lower() == "exit":
                 print("Exiting program.")
                 return
-            
             try:
                 choice = int(user_input)
                 if 0 <= choice < len(device_list):
@@ -54,15 +61,14 @@ async def run():
 
     if target_device_address:
         connected, client = await connect_to_device(target_device_address)
-        if connected:            
-            await asyncio.gather(
-                receive_signal(client),
-            )
-    
-            await disconnect_device(client)
-        else:
+        if not connected:
             print("Failed to connect to the device.")
-
+            return
+        print("Starting BLE notifications...")
+        await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
+        print("Streaming data. Press Ctrl-C to stop.")
+        # Keep running forever
+        await asyncio.Future()
     else:
         print(f"No device containing '{target_device_name_fragment}' in name found.")
 
@@ -118,13 +124,55 @@ def notification_handler(sender, data):
                 output = ', '.join([f"{label} : {value:.4f}" for label, value in zip(data_labels, floats)])
                 print(output)
 
+                # Broadcast payload with timestamp over WebSocket
+                try:
+                    timestamp_ms = time.time() * 1000
+                    payload_ws = {
+                        'force': floats[0],
+                        'roll': floats[1],
+                        'accX': floats[2],
+                        'timestamp': timestamp_ms
+                    }
+                    message = json.dumps(payload_ws)
+                    
+                    if clients:  # Only try to send if we have clients
+                        loop = asyncio.get_event_loop()
+                        for ws in clients.copy():  # Use copy to avoid modification during iteration
+                            if ws.open:  # Check if the connection is still open
+                                try:
+                                    loop.create_task(ws.send(message))
+                                except Exception as e:
+                                    print(f"Error sending to client: {e}")
+                                    # Don't remove client here, let the handler do it
+                            else:
+                                print("Client connection is closed, not sending")
+                except Exception as broadcast_e:
+                    print(f"Error broadcasting WebSocket message: {broadcast_e}")
+
                 # Remove the processed packet from the buffer
                 buffer = buffer[start_index + PACKET_SIZE:]
             except struct.error as e:
                 print(f"[Unpack Error] {e}")
                 buffer = buffer[start_index + 1:]  # Skip one byte and retry
+            except Exception as general_e:
+                print(f"[General Error] {general_e}")
+                buffer = buffer[start_index + 1:]  # Skip one byte and retry
         else:
             buffer = buffer[start_index + 1:]  # Invalid footer, skip and retry
+
+
+# WebSocket handler for managing client connections
+async def websocket_handler(websocket, path):
+    print(f"New client connected: {websocket.remote_address}")
+    clients.add(websocket)
+    try:
+        # Keep the connection alive until client disconnects
+        await websocket.wait_closed()
+    except Exception as e:
+        print(f"Error in websocket handler: {e}")
+    finally:
+        clients.remove(websocket)
+        print(f"Client disconnected: {websocket.remote_address}")
 
 
 async def wait_for_enter(stop_event):
@@ -135,16 +183,6 @@ async def wait_for_enter(stop_event):
 
 
 
-async def receive_signal(client, stop_event):
-    try:
-        await client.start_notify(CHARACTERISTIC_UUID, notification_handler)
-        await stop_event.wait()
-    except asyncio.CancelledError:
-        print("Stopping receive signal...")
-    except Exception as e:
-        print(f"Error during communication: {e}")
-    finally:
-        await client.stop_notify(CHARACTERISTIC_UUID)
 
 async def save_csv(filename="recorded_data.csv"):
     header = ["timestamp", *data_labels]
@@ -163,42 +201,6 @@ async def disconnect_device(client):
 #loop = asyncio.get_event_loop()
 #loop.run_until_complete(run())
 
-
-async def run():
-    # discovery & connect (unchanged)
-    target_fragment = "HIP_EXO_V2"
-    print("Scanning for Bluetooth devices...")
-    devices = await BleakScanner.discover()
-    addr = None
-    for d in devices:
-        if d.name and target_fragment in d.name:
-            addr = d.address
-            print(f"Found target: {d.name} [{addr}]")
-            break
-    if not addr:
-        print("...no matching device. Exiting.")
-        return
-
-    client = BleakClient(addr, timeout=10.0)
-    if not await client.connect():
-        print("Failed to connect.")
-        return
-    print("Connected!")
-
-    stop_event = asyncio.Event()
-    # launch both the notification listener and the “press Enter to stop” watcher
-    await asyncio.gather(
-        receive_signal(client, stop_event),
-        wait_for_enter(stop_event)
-    )
-
-    # once Enter is pressed and notifications stopped:
-    if client.is_connected:
-        await client.disconnect()
-        print("Disconnected.")
-
-    # save all accumulated data
-    await save_csv()
 
 if __name__ == "__main__":
     asyncio.run(run())
