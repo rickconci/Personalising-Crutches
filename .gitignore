@@ -1,2 +1,7 @@
 data/
 README.md
+
+.DS_Store
+
+*.BIN
+*.xlsx
