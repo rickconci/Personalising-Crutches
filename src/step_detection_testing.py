@@ -320,6 +320,33 @@ class StepDetectionTesting:
         final_troughs, _ = find_peaks(-d_force_dt, height=height_threshold, distance=min_dist_samples)
 
         return final_troughs / self.fs  # Return timestamps in seconds
+    
+
+    def step_detection_algo_8(self):
+        """
+        Detects steps based on a simple threshold of the force gradient.
+        The threshold is set relative to the most negative point in the gradient.
+        """
+        if self.force_gradient_signal is None:
+            print("Warning: Algo 8 requested but force gradient not available. Skipping.")
+            return np.array([])
+        
+        d_force_dt = self.force_gradient_signal
+        
+        # Handle case with no signal variation
+        if d_force_dt.min() == d_force_dt.max():
+            return np.array([])
+
+        threshold = d_force_dt.min() * 0.2
+        
+        # Keep only values below the threshold, zero out the rest.
+        # We are looking for sharp negative spikes (troughs).
+        d_force_dt_filtered = np.where(d_force_dt < threshold, d_force_dt, 0)
+        
+        # Find peaks in the negated signal (so we find the troughs)
+        peaks, _ = find_peaks(-d_force_dt_filtered, distance=int(0.3 * self.fs))
+        
+        return peaks / self.fs
 
     def save_summary_report(self, sorted_metrics: List[Dict], outdir: str):
         """
@@ -520,6 +547,7 @@ if __name__ == "__main__":
         "algo4_TKEO": tester.step_detection_algo_4,
         "algo5_Matched": tester.step_detection_algo_5,
         "algo6_JS": tester.step_detection_algo_6,
+        "algo8_Min_Thresh": tester.step_detection_algo_8,
     }
 
     for name, func in base_algos.items():
@@ -530,6 +558,7 @@ if __name__ == "__main__":
 
     # Add other specific algorithms
     unfiltered_algos["algo7_Force_Deriv"] = tester.step_detection_algo_7_force_deriv()
+    unfiltered_algos["algo8_Min_Thresh"] = tester.step_detection_algo_8()
     unfiltered_algos["deep_learning"] = tester.step_detection_deep(ckpt="finetuned_step_fm")
 
     # Apply post-processing filters to all algorithms

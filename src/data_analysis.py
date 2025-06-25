@@ -8,6 +8,9 @@ from ble_MCU_2 import record_trial_data
 import asyncio
 import plotly.graph_objs as go
 import shutil
+from scipy.signal import correlate, lfilter
+import argparse
+
 
 def _postprocess_steps(preds: np.ndarray, tolerance_ratio: float = 0.2, isolation_threshold: float = 5.0) -> np.ndarray:
     """
@@ -59,41 +62,27 @@ def _postprocess_steps(preds: np.ndarray, tolerance_ratio: float = 0.2, isolatio
 
 def detect_steps_unsupervised(force_signal: np.ndarray, time_signal: np.ndarray, fs: float) -> np.ndarray:
     """
-    Detects steps using an unsupervised matched-filter approach on the force gradient.
+    Detects steps using a dynamic threshold of the force gradient. The threshold is
+    set relative to the most negative point in the gradient signal.
     """
-    if len(force_signal) < int(fs): # Need at least 1s of data
+    if force_signal.size < int(fs): # Need at least 1s of data
         return np.array([])
 
     # 1. Calculate force gradient
-    force_grad = np.gradient(force_signal, time_signal)
+    d_force_dt = np.gradient(force_signal, time_signal)
 
-    # 2. Auto-generate a template from the most prominent peaks in the signal
-    template_len_s = 0.6
-    L = int(template_len_s * fs)
+   
     
-    # Find a few strong, initial peaks to serve as "pseudo ground truth"
-    initial_peaks, _ = find_peaks(force_grad, prominence=np.std(force_grad) * 1.5, distance=fs*0.5)
-    
-    segments = []
-    for i0 in initial_peaks[:5]: # Use up to the first 5 found peaks
-        if i0 - L//2 >= 0 and i0 + L//2 < len(force_grad):
-            seg = force_grad[i0-L//2:i0+L//2]
-            segments.append(seg)
-            
-    if not segments:
-        print("Warning: Could not auto-generate a step template. No initial prominent peaks found.")
-        return np.array([])
-        
-    template = np.mean(segments, axis=0)
-    template = (template - template.mean()) / (template.std() + 1e-6)
+    # 3. Set a threshold based on the most negative peak
+    threshold = d_force_dt.min() * 0.2
 
-    # 3. Correlate the signal with the auto-generated template
-    sig_n = (force_grad - force_grad.mean()) / (force_grad.std() + 1e-6)
-    corr = correlate(sig_n, template, mode='same')
-    
-    # 4. Find peaks on the correlation trace
-    prom = np.median(np.abs(corr)) * 5
-    peaks, _ = find_peaks(corr, prominence=prom, distance=0.3 * fs)
+    # 4. Filter the signal, keeping only values *below* the threshold.
+    d_force_dt_filtered = np.where(d_force_dt < threshold, d_force_dt, 0)
+
+    # 5. Find peaks in the *negated* filtered signal to identify troughs.
+    #    Use a refractory period to avoid multiple detections on the same step.
+    min_dist_samples = int(0.3 * fs)
+    peaks, _ = find_peaks(-d_force_dt_filtered, distance=min_dist_samples)
     
     return time_signal[peaks]
 
@@ -102,20 +91,30 @@ class DataProcessor:
     Orchestrates the data handling pipeline for each trial, including
     recording, initial analysis, and final processing.
     """
-    def __init__(self, user_id, trial_num, visualize_steps=False):
+    def __init__(self, user_id, trial_num, smooth_fraction=25, visualize_steps=False, data_path=None):
         self.user_id = user_id
         self.trial_num = trial_num
         self.visualize_steps = visualize_steps
+        self.smooth_fraction = smooth_fraction
         
-        # Create a specific directory for the current user
-        self.user_data_path = os.path.join(config.DATA_DIRECTORY, self.user_id)
-        os.makedirs(self.user_data_path, exist_ok=True)
-        
-        # Define file paths for the current trial
-        base_filename = f"{self.user_id}_trial_{self.trial_num}"
-        self.raw_data_path = os.path.join(self.user_data_path, base_filename + config.RAW_DATA_SUFFIX)
-        self.step_file_path = os.path.join(self.user_data_path, base_filename + config.STEP_FILE_SUFFIX)
-        self.visualization_path = os.path.join(self.user_data_path, base_filename + '_steps_visualization.html')
+        # Configure paths based on whether this is a live trial or a standalone run
+        if data_path:
+            # Standalone mode: paths are relative to the input data file
+            self.raw_data_path = data_path
+            base_path = os.path.splitext(data_path)[0]
+            self.step_file_path = base_path + '_steps.csv'
+            self.visualization_path = base_path + '_visualization.html'
+        else:
+            # Live mode: paths are based on user/trial in the data directory
+            self.user_data_path = os.path.join(config.DATA_DIRECTORY, self.user_id)
+            os.makedirs(self.user_data_path, exist_ok=True)
+            base_filename = f"{self.user_id}_trial_{self.trial_num}"
+            self.raw_data_path = os.path.join(self.user_data_path, base_filename + config.RAW_DATA_SUFFIX)
+            self.step_file_path = os.path.join(self.user_data_path, base_filename + config.STEP_FILE_SUFFIX)
+            self.visualization_path = os.path.join(self.user_data_path, base_filename + '_steps_visualization.html')
+
+    def get_trial_data_path(self):
+        return self.raw_data_path
 
     def _create_and_save_plot(self, df, steps):
         """
@@ -123,30 +122,39 @@ class DataProcessor:
         """
         fig = go.Figure()
 
-        # 1. Accelerometer Signal
-        if 'accX' in df.columns:
-            fig.add_trace(go.Scatter(x=df['timestamp'], y=df['accX'],
-                                     mode='lines', name='Accelerometer X', yaxis='y1'))
+        # 1. Smoothed Accelerometer Signal
+        if 'acc_x_z_smooth' in df.columns:
+            fig.add_trace(go.Scatter(x=df['timestamp'], y=df['acc_x_z_smooth'],
+                                     mode='lines', name='Smoothed Accel Magnitude', yaxis='y1'))
 
-        # 2. Force Signal on secondary axis
+        # 2. Force Signal and its Processed Gradient on secondary axis
         if 'force' in df.columns:
             fig.add_trace(go.Scatter(x=df['timestamp'], y=df['force'],
                                      mode='lines', name='Force',
-                                     line=dict(dash='dot'),
+                                     line=dict(dash='solid', color='rgba(255,153,51,0.6)'), # Orange
+                                     yaxis='y2'))
+        if 'force_grad_filtered' in df.columns:
+            fig.add_trace(go.Scatter(x=df['timestamp'], y=df['force_grad_filtered'],
+                                     mode='lines', name='Processed Force Grad',
+                                     line=dict(dash='dashdot', color='rgba(230,0,230,0.6)'), # Magenta
                                      yaxis='y2'))
 
         # 3. Detected Steps
-        if 'accX' in df.columns and len(steps) > 0:
-            step_y_values = np.interp(steps, df['timestamp'], df['accX'])
+        if 'acc_x_z_smooth' in df.columns and len(steps) > 0:
+            step_y_values = np.interp(steps, df['timestamp'], df['acc_x_z_smooth'])
             fig.add_trace(go.Scatter(x=steps, y=step_y_values,
                                      mode='markers', marker=dict(color='red', symbol='cross', size=8),
                                      name='Detected Steps'))
 
         # Configure layout
+        title = f'Step Detection Visualization for {os.path.basename(self.raw_data_path)}'
+        if self.user_id:
+            title = f'Step Detection Visualization for {self.user_id} Trial {self.trial_num}'
+
         layout_update = {
-            'title_text': f'Step Detection Visualization for {self.user_id} Trial {self.trial_num}',
+            'title_text': title,
             'xaxis_title': 'Time (s)',
-            'yaxis_title': 'Accelerometer X',
+            'yaxis_title': 'Smoothed Accel Magnitude',
             'legend_title_text': 'Signals'
         }
         if 'force' in df.columns:
@@ -162,68 +170,86 @@ class DataProcessor:
 
     def record_and_detect_peaks(self):
         """
-        Manages data recording. If recording fails, offers a fallback to use existing data.
+        Manages data recording for live trials. If recording fails, offers a fallback.
+        For standalone runs, this method directly uses the provided data path.
         Then performs automated peak detection.
         """
-        # 1. Attempt to record raw data by calling the integrated controller
-        print("\n--- Preparing for Data Recording ---")
-        try:
-            asyncio.run(record_trial_data(self.raw_data_path))
-        except Exception as e:
-            print(f"\nAn error occurred during data recording: {e}")
-            # The file existence check below will handle the failure.
+        # --- Live Trial Recording ---
+        # This block is skipped if a data_path was provided to __init__
+        if not hasattr(self, 'user_data_path'):
+            # This is a standalone run, self.raw_data_path is already set.
+            pass
+        else:
+            # This is a live trial run.
+            # --- Pre-trial cleanup ---
+            if os.path.exists(self.raw_data_path):
+                os.remove(self.raw_data_path)
 
-        # 2. Verify data was recorded. If not, prompt user for existing file.
-        if not os.path.exists(self.raw_data_path) or os.path.getsize(self.raw_data_path) == 0:
-            print("\nWarning: New data was not recorded (e.g., Bluetooth connection failed).")
-            use_existing = input("Would you like to use an existing raw data file for this trial? (yes/no): ").lower()
-            
-            if use_existing == 'yes':
-                existing_path = input("Please enter the full path to the existing raw data file: ")
-                if os.path.exists(existing_path):
-                    try:
-                        shutil.copy(existing_path, self.raw_data_path)
-                        print(f"Successfully copied existing data to '{self.raw_data_path}'.")
-                    except Exception as e:
-                        print(f"Error: Failed to copy the file. {e}")
+            # 1. Attempt to record raw data
+            print("\n--- Preparing for Data Recording ---")
+            try:
+                asyncio.run(record_trial_data(self.raw_data_path))
+            except Exception as e:
+                print(f"\nAn error occurred during data recording: {e}")
+
+            # 2. Verify data was recorded. If not, prompt user for existing file.
+            if not os.path.exists(self.raw_data_path) or os.path.getsize(self.raw_data_path) == 0:
+                print("\nWarning: New data was not recorded (e.g., Bluetooth connection failed).")
+                use_existing = input("Would you like to use an existing raw data file for this trial? (yes/no): ").lower()
+                
+                if use_existing == 'yes':
+                    existing_path = input("Please enter the full path to the existing raw data file: ")
+                    if os.path.exists(existing_path):
+                        try:
+                            shutil.copy(existing_path, self.raw_data_path)
+                            print(f"Successfully copied existing data to '{self.raw_data_path}'.")
+                        except Exception as e:
+                            print(f"Error: Failed to copy the file. {e}")
+                            return False
+                    else:
+                        print("Error: The file path you entered does not exist.")
                         return False
                 else:
-                    print("Error: The file path you entered does not exist.")
+                    print("The trial cannot proceed without data.")
                     return False
-            else:
-                print("The trial cannot proceed without data.")
-                return False
         
-        # 3. Perform peak detection on the new or copied file
+        # 3. Perform peak detection on the new, copied, or provided file
         try:
             df = pd.read_csv(self.raw_data_path)
             
-            # More robustly handle column renaming for compatibility.
-            # The goal is to have 'timestamp', 'accX', 'roll', and 'force'.
-            
-            # Standardize timestamp: prefer 'timestamp', fall back to 'acc_x_time'.
-            if 'acc_x_time' in df.columns and 'timestamp' not in df.columns:
-                df.rename(columns={"acc_x_time": "timestamp"}, inplace=True)
+            # Standardize column names for compatibility.
+            df.rename(columns={
+                "acc_x_time": "timestamp"
+            }, inplace=True, errors='ignore')
 
-            # Standardize force: prefer 'force', fall back to 'acc_z_data'.
-            if 'force' not in df.columns and 'acc_z_data' in df.columns:
-                df.rename(columns={"acc_z_data": "force"}, inplace=True)
-            
-            # Standardize other columns, ignoring errors if they don't exist.
-            df.rename(columns={"acc_x_data": "accX", "acc_y_data": "roll"}, inplace=True, errors='ignore')
+            alpha = self.smooth_fraction / 100.0
+            acc_x_smooth = lfilter([alpha], [1, -(1 - alpha)], df['acc_x_data'])
+            acc_z_smooth = lfilter([alpha], [1, -(1 - alpha)], df['acc_z_data'])
+            df['acc_x_z_smooth'] = acc_x_smooth**2 + acc_z_smooth**2
 
-            if df.empty or 'force' not in df.columns or 'timestamp' not in df.columns:
-                print("Warning: Raw data file is empty or missing required columns ('force', 'timestamp'). Aborting.")
-                return False
                 
             # Convert timestamp to seconds for analysis
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-            df['timestamp'] = (df['timestamp'] - df['timestamp'].iloc[0]).dt.total_seconds()
+            # The raw data, whether from the sensor or a fallback file, uses milliseconds.
+            df['timestamp'] = pd.to_numeric(df['timestamp'], errors='coerce')
+            df.dropna(subset=['timestamp'], inplace=True)
+            df['timestamp'] = (df['timestamp'] - df['timestamp'].iloc[0]) / 1000.0
+
+            # Pre-process signals
+            alpha = self.smooth_fraction / 100.0
+            acc_x_smooth = lfilter([alpha], [1, -(1 - alpha)], df['acc_x_data'])
+            # NOTE: Using accZ for this calculation as per your last edit.
+            acc_z_smooth = lfilter([alpha], [1, -(1 - alpha)], df['acc_z_data']) 
+            df['acc_x_z_smooth'] = acc_x_smooth**2 + acc_z_smooth**2
+
+            # Calculate force gradient for plotting and analysis
+            force_gradient = np.gradient(df['force'].values, df['timestamp'].values)
+            threshold = force_gradient.min() * 0.2
+            df['force_grad_filtered'] = np.where(force_gradient < threshold, force_gradient, 0)
             
             # Calculate sampling frequency
             fs = 1.0 / np.median(np.diff(df['timestamp'].values))
 
-            # Detect steps using the best algorithm
+            # Detect steps using the best algorithm. It now expects the raw force signal.
             raw_steps = detect_steps_unsupervised(df['force'].values, df['timestamp'].values, fs)
             
             # Apply post-processing filters
@@ -270,6 +296,7 @@ class DataProcessor:
             # in the raw data for each step time you identified.
             raw_df_sorted = raw_df.sort_values('timestamp').reset_index()
             steps_df_sorted = steps_df.sort_values('step_time')
+            print(steps_df_sorted)
 
             # Convert both timestamp columns to float64 to ensure compatibility
             raw_df_sorted['timestamp'] = raw_df_sorted['timestamp'].astype('float64')
@@ -309,11 +336,30 @@ class DataProcessor:
         return processed_data
 
 if __name__ == "__main__":
-    processor = DataProcessor("test_user_01", 1)
-    
-    # Manually get the data path
-    trial_data_file = processor.get_trial_data_path()
-    
-    # Process the data
-    metrics = processor.process_trial_data(trial_data_file)
-    print(f"Processed metrics: {metrics}")
+    parser = argparse.ArgumentParser(description="Run step detection and gait analysis on a single data file.")
+    parser.add_argument("data_file", nargs='?', type=str, default='/Users/riccardoconci/Library/Mobile Documents/com~apple~CloudDocs/HQ_2024/Projects/2024_Harvard_AIM/Research/OPMO/Personalising-Crutches/2025.06.18/Luke_test2.csv', help="Path to the raw data CSV file.")
+    args = parser.parse_args()
+
+    # Instantiate the processor in standalone mode, with visualization enabled.
+    processor = DataProcessor(user_id=None, trial_num=None, 
+                              data_path=args.data_file, 
+                              visualize_steps=True)
+
+    # Run the step detection part.
+    # This will load the file, find steps, save step file, and save visualization.
+    print("--- Running Step Detection ---")
+    success = processor.record_and_detect_peaks()
+
+    if success:
+        # Run the featurization part.
+        # This reads the step file we just created and calculates metrics.
+        print("\n--- Running Gait Featurization ---")
+        metrics = processor.featurize_trial_data()
+        print("\n--- Calculated Gait Metrics ---")
+        if metrics:
+            for key, value in metrics.items():
+                print(f"  {key}: {value}")
+        else:
+            print("Featurization did not return any metrics.")
+    else:
+        print("\nAnalysis failed. Could not proceed to featurization.")
