@@ -1,6 +1,6 @@
 data/
 README.md
-
+__pycache__/
 .DS_Store
 
 *.BIN

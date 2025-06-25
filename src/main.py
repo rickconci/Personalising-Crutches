@@ -21,7 +21,7 @@ class Experiment:
     Manages a single user experiment, guiding through the process
     of data collection, analysis, and optimization.
     """
-    def __init__(self, user_id, user_characteristics, objective, initial_crutch_geometry, data_manager):
+    def __init__(self, user_id, user_characteristics, objective, initial_crutch_geometry, data_manager, manual_correction=False):
         self.user_id = user_id
         self.user_characteristics = user_characteristics
         self.objective = objective
@@ -29,6 +29,7 @@ class Experiment:
         self.data_manager = data_manager
         self.bayesian_optimizer = BayesOpt()
         self.experiment_data = pd.DataFrame()
+        self.manual_correction = manual_correction
         
         # Create plots directory for this user
         self.plots_dir = os.path.join(config.DATA_DIRECTORY, self.user_id, 'plots')
@@ -107,7 +108,8 @@ class Experiment:
         print(f"\n--- Running Trial {trial_num} for User '{self.user_id}' ---")
         print(f"Current Geometry: {self.current_crutch_geometry}")
         
-        data_processor = DataProcessor(self.user_id, trial_num)
+        # Instantiate the processor and enable visualization by default.
+        data_processor = DataProcessor(self.user_id, trial_num, visualize_steps=True)
 
         # 1. Record data and perform initial peak detection
         # If this step fails, abort the trial.
@@ -117,30 +119,30 @@ class Experiment:
             print("Please resolve the issue with the recording script before trying again.")
             return False # Signal failure to the main run loop
 
-        # 2. Pause for manual step file correction using the HTML tool
-        # --- This is a temporary modification for workflow testing ---
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        html_file_path = os.path.join(script_dir, 'Accelerometer_Processing_Program.html')
-        
-        if os.path.exists(html_file_path):
-            webbrowser.open(f'file://{os.path.abspath(html_file_path)}')
-            print("\n--- Manual Step Correction (HTML Tool) ---")
-            print("The HTML analysis tool has been opened in your browser.")
-            print("\nInstructions:")
-            print(f"1. In the browser, click the FIRST 'Choose File' button (for Polar Sensor data).")
-            print(f"2. Navigate to and select the raw data file for this trial:")
-            print(f"   {data_processor.raw_data_path}")
-            print(f"3. (Optional) Load existing steps by clicking the SECOND 'Choose File' (next to Save) and selecting:")
-            print(f"   {data_processor.step_file_path}")
-            print(f"4. Manually correct the steps using the visual interface.")
-            print(f"5. When finished, click the 'Save' button. The corrected step file will likely go to your Downloads folder.")
-            print(f"6. You MUST manually move this downloaded '.step' file from Downloads into the following directory, overwriting the original file:")
-            print(f"   {data_processor.user_data_path}")
-            input("\nOnce you have MOVED THE FILE and are ready, press Enter here to continue...")
-        else:
-            # Fallback to the original method if the HTML file isn't found
-            input(f"\nPlease open and manually correct the step file: {data_processor.step_file_path}\n"
-                  "Once you have saved your changes, press Enter to continue...")
+        # 2. (Optional) Pause for manual step file correction using the HTML tool
+        if self.manual_correction:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            html_file_path = os.path.join(script_dir, 'Accelerometer_Processing_Program.html')
+            
+            if os.path.exists(html_file_path):
+                webbrowser.open(f'file://{os.path.abspath(html_file_path)}')
+                print("\n--- Manual Step Correction (HTML Tool) ---")
+                print("The HTML analysis tool has been opened in your browser.")
+                print("\nInstructions:")
+                print(f"1. In the browser, click the FIRST 'Choose File' button (for Polar Sensor data).")
+                print(f"2. Navigate to and select the raw data file for this trial:")
+                print(f"   {data_processor.raw_data_path}")
+                print(f"3. (Optional) Load existing steps by clicking the SECOND 'Choose File' (next to Save) and selecting:")
+                print(f"   {data_processor.step_file_path}")
+                print(f"4. Manually correct the steps using the visual interface.")
+                print(f"5. When finished, click the 'Save' button. The corrected step file will likely go to your Downloads folder.")
+                print(f"6. You MUST manually move this downloaded '.step' file from Downloads into the following directory, overwriting the original file:")
+                print(f"   {data_processor.user_data_path}")
+                input("\nOnce you have MOVED THE FILE and are ready, press Enter here to continue...")
+            else:
+                # Fallback to the original method if the HTML file isn't found
+                input(f"\nPlease open and manually correct the step file: {data_processor.step_file_path}\n"
+                      "Once you have saved your changes, press Enter to continue...")
 
         # 3. Featurize data using the corrected steps
         processed_data = data_processor.featurize_trial_data()
@@ -251,8 +253,11 @@ class Experiment:
                 self.current_crutch_geometry.update(next_params)
         
         print("\n----- Experiment Finished -----")
-        best_trial = self.experiment_data.loc[self.experiment_data['Total_Combined_Loss'].idxmin()]
-        print(f"Best trial found in this experiment:\n{best_trial}")
+        if not self.experiment_data.empty:
+            best_trial = self.experiment_data.loc[self.experiment_data['Total_Combined_Loss'].idxmin()]
+            print(f"Best trial found in this experiment:\n{best_trial}")
+        else:
+            print("No trials were successfully completed. Cannot determine a best trial.")
 
 def run_application():
     """ Main application loop to manage experiments. """
@@ -278,15 +283,18 @@ def run_application():
                 except ValueError:
                     print(f"Please enter a numeric value for {char}")
         
+        enable_manual_check = input("3. Enable manual step correction for this experiment? (yes/no): ").lower() == 'yes'
+
         experiment = Experiment(
             user_id=user_id,
             user_characteristics=user_characteristics,
             objective=objective,
             initial_crutch_geometry=config.initial_crutch_geometry,
-            data_manager=data_manager
+            data_manager=data_manager,
+            manual_correction=enable_manual_check
         )
         
-        num_iterations = int(input("3. Enter the number of trials for this experiment: "))
+        num_iterations = int(input("4. Enter the number of trials for this experiment: "))
         experiment.run(num_iterations=num_iterations)
 
         if input("\nRun another experiment? (yes/no): ").lower() != 'yes':
