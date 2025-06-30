@@ -240,7 +240,8 @@ def create_metabolic_visualization(base_path: str, body_weight_kg: float = 77.0)
         print("LUKE: No metabolic data available for visualization")
         return None
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    # Create 3 subplots instead of 2
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
     fig.suptitle(f'Metabolic Analysis: {os.path.basename(base_path)}', fontsize=14, fontweight='bold')
 
     # Top plot: Brockway metabolic cost as a function of time (raw calculation)
@@ -251,7 +252,7 @@ def create_metabolic_visualization(base_path: str, body_weight_kg: float = 77.0)
     ax1.set_title('Brockway Metabolic Cost (Raw)', fontsize=11)
     ax1.grid(True, alpha=0.3)
 
-    # Bottom plot: Metabolic cost and convergence
+    # Middle plot: Metabolic cost and convergence
     time_bar = metabolic_data['time_bar']
     y_bar = metabolic_data['y_bar']
     y_average = metabolic_data['y_average']
@@ -259,16 +260,61 @@ def create_metabolic_visualization(base_path: str, body_weight_kg: float = 77.0)
 
     ax2.plot(time/60, y_meas, 'ko', markersize=3, alpha=0.7, label='Measured Data')
     ax2.plot(time_bar/60, y_bar, 'r-', linewidth=2, label='Exponential Fit')
-    ax2.axhline(y=y_average, color='g', linestyle='--', linewidth=1.5, label=f'Average: {y_average:.3f} W/kg')
+    ax2.axhline(y=y_average, color='g', linestyle='--', linewidth=1.5, label=f'Last 2-min Average (Ground Truth): {y_average:.3f} W/kg')
     if y_estimate is not None:
-        ax2.axhline(y=y_estimate, color='orange', linestyle=':', linewidth=1.5, label=f'Estimate: {y_estimate:.3f} W/kg')
-    ax2.set_xlabel('Time (min)')
+        ax2.axhline(y=y_estimate, color='orange', linestyle=':', linewidth=1.5, label=f'Exponential Estimate: {y_estimate:.3f} W/kg')
     ax2.set_ylabel('Metabolic Cost (W/kg)')
     ax2.set_title('Metabolic Cost Convergence Analysis', fontsize=11)
     ax2.legend()
     ax2.grid(True, alpha=0.3)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.98])
+    # Bottom plot: Error analysis (difference between exponential estimate and ground truth)
+    if y_estimate is not None:
+        # Calculate error
+        error = y_estimate - y_average
+        error_percentage = (error / y_average) * 100
+        
+        # Create error bar
+        ax3.axhline(y=0, color='k', linestyle='-', alpha=0.5, label='Zero Error Line')
+        ax3.bar(['Exponential vs Ground Truth'], [error], color='red' if error > 0 else 'blue', alpha=0.7)
+        ax3.set_ylabel('Error (W/kg)')
+        ax3.set_title(f'Estimation Error: {error:.3f} W/kg ({error_percentage:+.1f}%)', fontsize=11)
+        ax3.grid(True, alpha=0.3)
+        
+        # Add text annotation with detailed error information
+        ax3.text(0, error/2, f'Error: {error:.3f} W/kg\n({error_percentage:+.1f}%)', 
+                ha='center', va='center' if error > 0 else 'top', 
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
+        
+        # Add legend
+        ax3.legend()
+        
+        # Print error information to console
+        print(f"\n--- Estimation Error Analysis ---")
+        print(f"Ground Truth (Last 2-min average): {y_average:.4f} W/kg")
+        print(f"Exponential Estimate: {y_estimate:.4f} W/kg")
+        print(f"Absolute Error: {error:.4f} W/kg")
+        print(f"Relative Error: {error_percentage:+.2f}%")
+        
+        if abs(error_percentage) < 5:
+            print("✓ Excellent estimation accuracy (< 5% error)")
+        elif abs(error_percentage) < 10:
+            print("✓ Good estimation accuracy (< 10% error)")
+        elif abs(error_percentage) < 20:
+            print("⚠ Acceptable estimation accuracy (< 20% error)")
+        else:
+            print("⚠ High estimation error (> 20% error) - consider longer protocols")
+    else:
+        # If no exponential estimate available, show message
+        ax3.text(0.5, 0.5, 'No exponential estimate available\n(protocol too short for estimation)', 
+                ha='center', va='center', transform=ax3.transAxes, 
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgray", alpha=0.8))
+        ax3.set_ylabel('Error (W/kg)')
+        ax3.set_title('Estimation Error Analysis', fontsize=11)
+        ax3.grid(True, alpha=0.3)
+
+    ax3.set_xlabel('Time (min)')
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     return fig
 
 def main():

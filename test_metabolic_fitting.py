@@ -6,7 +6,7 @@ This demonstrates the correct approach for short-duration protocols.
 
 import numpy as np
 import matplotlib.pyplot as plt
-from src.data_analysis import compute_metabolic_cost_loss_2min, metabolic_rate_estimation
+from src.data_analysis import compute_metabolic_cost_loss, metabolic_rate_estimation
 
 def generate_test_data(duration_min=2.0, sampling_rate=1.0):
     """
@@ -56,7 +56,7 @@ def test_metabolic_fitting():
     # Calculate metabolic cost using the improved function
     body_weight = 77.0  # kg
     
-    metabolic_cost = compute_metabolic_cost_loss_2min(
+    metabolic_cost = compute_metabolic_cost_loss(
         vo2_data, vco2_data, time_data, body_weight, use_estimation=True
     )
     
@@ -127,7 +127,7 @@ def test_metabolic_fitting():
     print("✓ Exponential fitting projects to steady state")
     print("✓ Simple averaging overestimates metabolic cost")
     print("✓ This is the gold standard for short protocols")
-    print("✓ Use compute_metabolic_cost_loss_2min for your project")
+    print("✓ Use compute_metabolic_cost_loss for your project")
 
 if __name__ == "__main__":
     test_metabolic_fitting() 

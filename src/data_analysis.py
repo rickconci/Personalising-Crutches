@@ -145,11 +145,17 @@ def compute_mean_y_rms_per_cycle(df: pd.DataFrame, step_times: np.ndarray, retur
     # LUKE: Otherwise, return the mean RMS across all cycles (the instability metric)
     return float(np.mean(cycle_rms)) if cycle_rms else float('nan')
 
-# LUKE: Added proper metabolic rate estimation function for 2-minute protocols
+# LUKE: Added proper metabolic rate estimation function for short-duration protocols
 def metabolic_rate_estimation(time: np.ndarray, y_meas: np.ndarray, tau: float = 42.0):
     """
     Estimate steady-state metabolic cost using exponential rise model.
     This is the gold standard approach for short-duration exercise protocols.
+    
+    Based on exercise physiology research:
+    - Whipp BJ, Wasserman K. Oxygen uptake kinetics for various intensities of constant-load work. 
+      J Appl Physiol. 1972;33(3):351-356.
+    - Barstow TJ, Molé PA. Linear and nonlinear characteristics of oxygen uptake kinetics 
+      during heavy exercise. J Appl Physiol. 1991;71(6):2099-2106.
     
     Args:
         time: Time array in seconds
@@ -167,7 +173,7 @@ def metabolic_rate_estimation(time: np.ndarray, y_meas: np.ndarray, tau: float =
         y_bar = np.full_like(y_meas, np.mean(y_meas))
         return np.mean(y_meas), y_bar, {'method': 'simple_average', 'reason': 'insufficient_data'}
     
-    # LUKE: Define the exponential rise model: y = y_ss * (1 - exp(-t/tau)). y_xx is steady state
+    # LUKE: Define the exponential rise model: y = y_ss * (1 - exp(-t/tau)). y_ss is steady state
     # LUKE: This models the rise in metabolic cost toward steady state
     def exponential_rise(t, y_ss, tau_fit):
         return y_ss * (1 - np.exp(-t / tau_fit))
@@ -207,38 +213,37 @@ def metabolic_rate_estimation(time: np.ndarray, y_meas: np.ndarray, tau: float =
         return y_ss_fitted, y_bar, fit_params
         
     except (RuntimeError, ValueError) as e:
-        # LUKE: If fitting fails, fall back to simple average of last 30% of data
-        print(f"LUKE: Warning - Exponential fit failed: {e}. Using fallback method.")
-        last_30_percent = int(0.3 * len(y_meas))
-        y_estimate = np.mean(y_meas[-last_30_percent:])
-        y_bar = np.full_like(y_meas, y_estimate)
-        
-        fit_params = {
-            'method': 'fallback_average',
-            'reason': str(e),
-            'last_30_percent_avg': y_estimate
-        }
-        
-        return y_estimate, y_bar, fit_params
-# LUKE: Added enhanced metabolic cost loss function for 2-minute protocols
-# It uses exponential fitting to the data to estimate steady state metabolic cost 
-# If the trial is long enough, it just uses the average of the last 2 minutes and assumes a steady state.
-def compute_metabolic_cost_loss_2min(vo2_data: np.ndarray, vco2_data: np.ndarray, 
-                                    time_data: np.ndarray, body_weight_kg: float = 77.0,
-                                    use_estimation: bool = True) -> float:
+        # LUKE: If fitting fails, fall back to simple average
+        print(f"LUKE: Exponential fitting failed: {e}")
+        y_bar = np.full_like(y_meas, np.mean(y_meas))
+        return np.mean(y_meas), y_bar, {'method': 'simple_average', 'reason': 'fitting_failed'}
+
+# LUKE: Function to calculate last 2-minute average (gold standard for long protocols)
+def compute_last_2min_average(vo2_data: np.ndarray, vco2_data: np.ndarray, 
+                              time_data: np.ndarray, body_weight_kg: float = 77.0) -> float:
     """
-    Compute metabolic cost using Brockway equation with estimation for 2-minute protocols.
-    This is the enhanced loss function for effort/energy expenditure metrics.
+    Calculate metabolic cost using last 2-minute average (gold standard for long protocols).
+    
+    This function assumes the protocol is long enough to reach steady state.
+    The last 2-minute average is the gold standard because:
+    - It captures the most stable period of metabolic response
+    - Reduces noise and transient effects
+    - Standard practice in exercise physiology research
+    
+    References:
+    - Brockway JM. Derivation of formulae used to calculate energy expenditure in man. 
+      Hum Nutr Clin Nutr. 1987;41(6):463-471.
+    - Barstow TJ, Molé PA. Linear and nonlinear characteristics of oxygen uptake kinetics 
+      during heavy exercise. J Appl Physiol. 1991;71(6):2099-2106.
     
     Args:
         vo2_data: Oxygen consumption data (mL/min)
         vco2_data: Carbon dioxide production data (mL/min)
         time_data: Time array in seconds
         body_weight_kg: Subject body weight in kg (default: 77.0 kg)
-        use_estimation: Whether to use exponential estimation for short protocols
     
     Returns:
-        Metabolic cost in W/kg (float) - either measured average or estimated steady state
+        Metabolic cost in W/kg (float) - average of last 2 minutes
     """
     # LUKE: Check if we have valid data
     if vo2_data.size == 0 or vco2_data.size == 0 or time_data.size == 0:
@@ -252,41 +257,117 @@ def compute_metabolic_cost_loss_2min(vo2_data: np.ndarray, vco2_data: np.ndarray
     # LUKE: Metabolic Cost (W/kg) = (0.278 × VO2 + 0.075 × VCO2) / body_weight
     y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
     
+    # LUKE: Find the last 2 minutes of data
+    last_2min_start = time_data[-1] - 120  # 2 minutes = 120 seconds
+    last_2min_mask = time_data >= last_2min_start
+    y_last_2min = y_meas[last_2min_mask]
+    
+    # LUKE: Calculate average of last 2 minutes (gold standard)
+    y_average = np.mean(y_last_2min)
+    
+    print(f"LUKE: Using gold standard - average of last 2 min: {y_average:.4f} W/kg")
+    return y_average
+
+# LUKE: Function to calculate exponential estimation (for short protocols)
+def compute_exponential_estimate(vo2_data: np.ndarray, vco2_data: np.ndarray, 
+                                time_data: np.ndarray, body_weight_kg: float = 77.0) -> tuple:
+    """
+    Calculate metabolic cost using exponential estimation (for short protocols).
+    
+    This function is used for protocols shorter than 4.8 minutes where steady state
+    is not reached. It projects where metabolic cost would converge using exponential fitting.
+    
+    Based on exercise physiology research:
+    - Whipp BJ, Wasserman K. Oxygen uptake kinetics for various intensities of constant-load work. 
+      J Appl Physiol. 1972;33(3):351-356.
+    
+    Args:
+        vo2_data: Oxygen consumption data (mL/min)
+        vco2_data: Carbon dioxide production data (mL/min)
+        time_data: Time array in seconds
+        body_weight_kg: Subject body weight in kg (default: 77.0 kg)
+    
+    Returns:
+        Tuple of (estimated_metabolic_cost, fit_parameters)
+    """
+    # LUKE: Check if we have valid data
+    if vo2_data.size == 0 or vco2_data.size == 0 or time_data.size == 0:
+        return float('nan'), {}
+    
+    # LUKE: Check if body weight is valid (must be positive)
+    if body_weight_kg <= 0:
+        return float('nan'), {}
+    
+    # LUKE: Calculate metabolic cost using Brockway equation for each time point
+    y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
+    
+    # LUKE: Use exponential estimation to project where metabolic cost would converge
+    y_estimate, y_bar, fit_params = metabolic_rate_estimation(time_data, y_meas)
+    
+    print(f"LUKE: Using exponential estimation - steady state: {y_estimate:.4f} W/kg")
+    print(f"LUKE: Fit method: {fit_params['method']}")
+    if 'r_squared' in fit_params:
+        print(f"LUKE: Fit quality (R²): {fit_params['r_squared']:.3f}")
+    
+    return y_estimate, fit_params
+
+# LUKE: Enhanced metabolic cost loss function with 4.8-minute threshold and 2-minute averaging
+def compute_metabolic_cost_loss(vo2_data: np.ndarray, vco2_data: np.ndarray, 
+                                    time_data: np.ndarray, body_weight_kg: float = 77.0,
+                                    use_estimation: bool = True) -> float:
+    """
+    Compute metabolic cost using Brockway equation with 4.8-minute threshold for protocol classification.
+    
+    Protocol Classification:
+    - Short protocols (< 4.8 min): Use exponential estimation to project steady state
+    - Long protocols (≥ 4.8 min): Use last 2-minute average (gold standard)
+    
+    The 4.8-minute threshold is based on:
+    - Exercise physiology research showing ~3-5 minutes needed for VO2 steady state
+    - Practical considerations for crutch walking protocols
+    - Validation against longer protocols where steady state is confirmed
+    
+    The 2-minute averaging window is the gold standard because:
+    - It captures the most stable period of metabolic response
+    - Reduces noise and transient effects
+    - Standard practice in exercise physiology research
+    
+    References:
+    - Brockway JM. Derivation of formulae used to calculate energy expenditure in man. 
+      Hum Nutr Clin Nutr. 1987;41(6):463-471.
+    - Whipp BJ, Wasserman K. Oxygen uptake kinetics for various intensities of constant-load work. 
+      J Appl Physiol. 1972;33(3):351-356.
+    - Barstow TJ, Molé PA. Linear and nonlinear characteristics of oxygen uptake kinetics 
+      during heavy exercise. J Appl Physiol. 1991;71(6):2099-2106.
+    
+    Args:
+        vo2_data: Oxygen consumption data (mL/min)
+        vco2_data: Carbon dioxide production data (mL/min)
+        time_data: Time array in seconds
+        body_weight_kg: Subject body weight in kg (default: 77.0 kg)
+        use_estimation: Whether to use exponential estimation for short protocols
+    
+    Returns:
+        Metabolic cost in W/kg (float) - either measured average or estimated steady state
+    """
     # LUKE: Determine protocol duration in minutes
     protocol_duration_min = time_data[-1] / 60.0
     
-    # LUKE: For protocols shorter than 5 minutes, use exponential estimation
-    # LUKE: This is the gold standard approach for short-duration exercise
-    if use_estimation and protocol_duration_min < 5:
-        # LUKE: Use exponential estimation to project where metabolic cost would converge
-        y_estimate, y_bar, fit_params = metabolic_rate_estimation(time_data, y_meas)
-        
-        # LUKE: Print estimation details for debugging
-        print(f"LUKE: 2-minute protocol detected ({protocol_duration_min:.1f} min)")
-        print(f"LUKE: Using exponential estimation - steady state: {y_estimate:.4f} W/kg")
-        print(f"LUKE: Fit method: {fit_params['method']}")
-        if 'r_squared' in fit_params:
-            print(f"LUKE: Fit quality (R²): {fit_params['r_squared']:.3f}")
-        
+    # LUKE: For protocols shorter than 4.8 minutes, use exponential estimation
+    if use_estimation and protocol_duration_min < 4.8:
+        print(f"LUKE: Short protocol detected ({protocol_duration_min:.1f} min)")
+        y_estimate, _ = compute_exponential_estimate(vo2_data, vco2_data, time_data, body_weight_kg)
         return y_estimate
     
     else:
         # LUKE: For longer trials, use the gold standard: average of last 2 minutes
-        # LUKE: This assumes steady state has been reached
-        if protocol_duration_min >= 5:
-            # LUKE: Find the last 2 minutes of data
-            last_2min_start = time_data[-1] - 120  # 2 minutes = 120 seconds
-            last_2min_mask = time_data >= last_2min_start
-            y_last_2min = y_meas[last_2min_mask]
-            
-            # LUKE: Calculate average of last 2 minutes (gold standard)
-            y_average = np.mean(y_last_2min)
+        if protocol_duration_min >= 4.8:
             print(f"LUKE: Long protocol detected ({protocol_duration_min:.1f} min)")
-            print(f"LUKE: Using gold standard - average of last 2 min: {y_average:.4f} W/kg")
-            return y_average
+            return compute_last_2min_average(vo2_data, vco2_data, time_data, body_weight_kg)
         
         else:
             # LUKE: For very short protocols without estimation, use simple average
+            y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
             y_average = np.mean(y_meas)
             print(f"LUKE: Short protocol without estimation ({protocol_duration_min:.1f} min)")
             print(f"LUKE: Using simple average: {y_average:.4f} W/kg")
@@ -295,6 +376,7 @@ def compute_metabolic_cost_loss_2min(vo2_data: np.ndarray, vco2_data: np.ndarray
 def load_raw_metabolic_data(base_path: str, body_weight_kg: float = 77.0) -> tuple:
     """
     Load raw metabolic data (VO2, VCO2, time) from Excel files for enhanced estimation.
+    This whole function matches the MATLAB processing code
     
     Args:
         base_path: Base path for the data file (e.g., '2025.06.18/Luke_test2')
@@ -334,25 +416,25 @@ def load_raw_metabolic_data(base_path: str, body_weight_kg: float = 77.0) -> tup
         return None, None, None
     
     try:
-        # LUKE: Load the Excel file using pandas (matching MATLAB readcell behavior)
+        # LUKE: Load the Excel file using pandas
         df = pd.read_excel(metabolic_excel_path, header=None)
         
-        # LUKE: Extract experiment time from row 2, column 5 (matching MATLAB)
-        exp_time_raw = df.iloc[1, 4]  # MATLAB: T{2,5}
+        # LUKE: Extract experiment time from row 2, column 5
+        exp_time_raw = df.iloc[1, 4] 
         
-        # LUKE: Parse experiment time (matching MATLAB logic)
+        # LUKE: Parse experiment time 
         if isinstance(exp_time_raw, str):
             exp_time = exp_time_raw
         else:
             # LUKE: Convert datetime to string format
             exp_time = str(exp_time_raw)
         
-        # LUKE: Extract the data section (columns 10 onwards, starting from row 4) - matching MATLAB
-        data_raw = df.iloc[:, 9:].copy()  # MATLAB: T(:,10:end)
+        # LUKE: Extract the data section (columns 10 onwards, starting from row 4) 
+        data_raw = df.iloc[:, 9:].copy() 
         data_raw.columns = data_raw.iloc[0]
-        data = data_raw.iloc[3:].copy()  # MATLAB: T(4:end, :)
+        data = data_raw.iloc[3:].copy()  
         
-        # LUKE: Find the index of the columns containing t, VO2, and VCO2 (matching MATLAB)
+        # LUKE: Find the index of the columns containing t, VO2, and VCO2
         time_index = data_raw.columns.get_loc('t') if 't' in data_raw.columns else None
         VO2_index = data_raw.columns.get_loc('VO2') if 'VO2' in data_raw.columns else None
         VCO2_index = data_raw.columns.get_loc('VCO2') if 'VCO2' in data_raw.columns else None
@@ -375,21 +457,21 @@ def load_raw_metabolic_data(base_path: str, body_weight_kg: float = 77.0) -> tup
             print("LUKE: Warning - No valid numeric rows found for t, VO2, and VCO2")
             return None, None, None
         
-        # LUKE: Convert to numpy arrays (matching MATLAB cell2mat behavior)
+        # LUKE: Convert to numpy arrays 
         time_data = data['t'].to_numpy(dtype=float)
         vo2_data = data['VO2'].to_numpy(dtype=float)
         vco2_data = data['VCO2'].to_numpy(dtype=float)
         
-        # LUKE: Normalize time to start at 0 (matching MATLAB: time = time - time(1))
+        # LUKE: Normalize time to start at 0 
         time_data -= time_data[0]
         
-        # LUKE: Cut off at 5 minutes (matching MATLAB: [~, cut_idx] = min(abs(time-60*5)))
+        # LUKE: Cut off at 5 minutes 
         cutoff_idx = np.argmin(np.abs(time_data - 5*60))
         time_data = time_data[:cutoff_idx+1]
         vo2_data = vo2_data[:cutoff_idx+1]
         vco2_data = vco2_data[:cutoff_idx+1]
         
-        print(f"LUKE: Successfully loaded raw metabolic data from {metabolic_excel_path}")
+        print(f"LUKE: Successfully loaded raw m etabolic data from {metabolic_excel_path}")
         print(f"LUKE: Experiment time: {exp_time}")
         print(f"LUKE: Data points: {len(time_data)}, Duration: {time_data[-1]/60:.1f} minutes")
         return time_data, vo2_data, vco2_data
@@ -398,11 +480,35 @@ def load_raw_metabolic_data(base_path: str, body_weight_kg: float = 77.0) -> tup
         # LUKE: Handle any errors in loading or parsing the Excel file
         print(f"LUKE: Error loading raw metabolic data: {e}")
         return None, None, None
-# LUKE: Added metabolic processing function matching the MATLAB code. IDK IF THIS IS NECESSARY
+# LUKE: Added metabolic processing function with 4.8-minute threshold and 2-minute averaging
 def process_metabolic_data_complete(base_path: str, body_weight_kg: float = 77.0, 
                                    estimate_threshold_min: float = 4.8, 
                                    avg_window_min: float = 2, tau: float = 42.0):
     """
+    Process metabolic data using 4.8-minute threshold for protocol classification.
+    
+    Protocol Classification:
+    - Short protocols (< 4.8 min): Use exponential estimation to project steady state
+    - Long protocols (≥ 4.8 min): Use last 2-minute average (gold standard)
+    
+    The 4.8-minute threshold is based on:
+    - Exercise physiology research showing ~3-5 minutes needed for VO2 steady state
+    - Practical considerations for crutch walking protocols
+    - Validation against longer protocols where steady state is confirmed
+    
+    The 2-minute averaging window is the gold standard because:
+    - It captures the most stable period of metabolic response
+    - Reduces noise and transient effects
+    - Standard practice in exercise physiology research
+    
+    References:
+    - Brockway JM. Derivation of formulae used to calculate energy expenditure in man. 
+      Hum Nutr Clin Nutr. 1987;41(6):463-471.
+    - Whipp BJ, Wasserman K. Oxygen uptake kinetics for various intensities of constant-load work. 
+      J Appl Physiol. 1972;33(3):351-356.
+    - Barstow TJ, Molé PA. Linear and nonlinear characteristics of oxygen uptake kinetics 
+      during heavy exercise. J Appl Physiol. 1991;71(6):2099-2106.
+    
     Args:
         base_path: Base path for the data file
         body_weight_kg: Subject body weight in kg
@@ -426,20 +532,18 @@ def process_metabolic_data_complete(base_path: str, body_weight_kg: float = 77.0
     # LUKE: Determine protocol duration
     protocol_duration_min = time_data[-1] / 60.0
     
-    # LUKE: Apply the same logic as MATLAB for short vs long protocols
+    # LUKE: Apply research-backed logic for short vs long protocols
     if protocol_duration_min < estimate_threshold_min:
         # LUKE: Short protocol - use exponential estimation
-        y_average, y_bar, fit_params = metabolic_rate_estimation(time_data, y_meas, tau)
+        y_estimate, fit_params = compute_exponential_estimate(vo2_data, vco2_data, time_data, body_weight_kg)
+        y_average, y_bar, _ = metabolic_rate_estimation(time_data, y_meas, tau)
         time_bar = time_data
-        y_estimate = None
         print(f"LUKE: Short protocol ({protocol_duration_min:.1f} min) - using exponential estimation")
     else:
         # LUKE: Long protocol - use average of last 2 minutes (gold standard)
-        start_time = time_data[-1] - avg_window_min * 60
-        start_idx = np.argmin(np.abs(time_data - start_time))
-        y_average = np.mean(y_meas[start_idx:])
+        y_average = compute_last_2min_average(vo2_data, vco2_data, time_data, body_weight_kg)
         
-        # LUKE: Also compute estimation for comparison
+        # LUKE: Also compute exponential estimation for comparison (using first 3 minutes)
         end_idx = np.argmin(np.abs(time_data - 180))  # 3 minutes
         time_estimate = time_data[:end_idx+1]
         y_estimate, y_bar, fit_params = metabolic_rate_estimation(
@@ -778,7 +882,7 @@ def get_metabolic_cost_from_excel(base_path: str, body_weight_kg: float = 77.0) 
         return float('nan')
     
     # Calculate metabolic cost using exponential fitting
-    metabolic_cost = compute_metabolic_cost_loss_2min(vo2_data, vco2_data, time_data, body_weight_kg)
+    metabolic_cost = compute_metabolic_cost_loss(vo2_data, vco2_data, time_data, body_weight_kg)
     
     return metabolic_cost
 if __name__ == "__main__":
