@@ -1,0 +1,6 @@
+metric,value,unit
+participant,Luke,
+geometry,10.5,
+cycle_duration_loss,0.20767376561760964,s
+y_rms_loss,7.792073354683942,m/s²
+x_rms_loss,4.9792694914641915,m/s²

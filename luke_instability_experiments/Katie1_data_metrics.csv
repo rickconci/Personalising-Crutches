@@ -1,0 +1,6 @@
+metric,value,unit
+participant,Katie,
+geometry,14,
+cycle_duration_loss,0.1903072148168382,s
+y_rms_loss,8.73224776872463,m/s²
+x_rms_loss,6.538622258009599,m/s²

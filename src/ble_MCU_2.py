@@ -16,7 +16,7 @@ async def record_trial_data(output_filename):
     """
     buffer = bytearray()
     recorded_data = []
-    data_labels = ["force", "roll", 'accX']
+    data_labels = ["force", "accX", 'accY']
 
     # --- Packet Structure ---
     HEADER_MARKER = 0xAA
@@ -67,7 +67,7 @@ async def record_trial_data(output_filename):
                 await client.stop_notify(CHARACTERISTIC_UUID)
 
     async def save_csv(filename):
-        header = ["acc_x_time", "force", "roll", "acc_x_data"]
+        header = ["relative_time_ms", "force", "accX", "accY"]
         
         # Convert timestamps to relative time with 5ms increments
         relative_data = []

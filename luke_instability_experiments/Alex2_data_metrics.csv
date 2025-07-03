@@ -1,0 +1,6 @@
+metric,value,unit
+participant,Alex,
+geometry,18.2,
+cycle_duration_loss,0.48116178845235236,s
+y_rms_loss,8.577605327849753,m/s²
+x_rms_loss,13.889751834886853,m/s²

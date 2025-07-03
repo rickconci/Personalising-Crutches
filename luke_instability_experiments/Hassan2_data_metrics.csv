@@ -1,0 +1,6 @@
+metric,value,unit
+participant,Hassan,
+geometry,18.2,
+cycle_duration_loss,0.271987041628107,s
+y_rms_loss,10.203469710325114,m/s²
+x_rms_loss,11.172967053743694,m/s²
