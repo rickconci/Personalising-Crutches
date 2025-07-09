@@ -26,7 +26,7 @@ initial_crutch_geometry = {'alpha': 90, 'beta': 110, 'gamma': 0, 'delta': 0}
 crutch_params_boundaries = [
     {'name': 'alpha', 'type': 'discrete', 'domain': np.arange(70, 125, 5).tolist()}, # alpha
     {'name': 'beta',  'type': 'discrete', 'domain': np.arange(90, 145, 5).tolist()}, # beta
-    {'name': 'gamma', 'type': 'discrete', 'domain': np.arange(0, 33, 3).tolist()},    # gamma
+    {'name': 'gamma', 'type': 'discrete', 'domain': np.arange(-15, 25, 3).tolist()},    # gamma
     {'name': 'delta', 'type': 'discrete', 'domain': np.arange(0, 21, 2).tolist()}     # delta
 ]
 

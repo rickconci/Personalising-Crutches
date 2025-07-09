@@ -61,7 +61,7 @@ suggest anything shorter than a 5 degree change in alpha/beta vs a 3 degree chan
 
 alpha_range = list(range(70, 125, 5))   
 beta_range  = list(range(90, 145, 5))   
-gamma_range = list(range(0, 33, 3))    
+gamma_range = list(range(-15, 25, 3))    
 
 """Define the search space for GPyOpt similar to the way Riccardo did it.
 GPyOpt needs a dictionary to tell it where to search. 
@@ -180,7 +180,7 @@ for trial in range(1, n_trials + 1):
     print("Enter last tested crutch parameters (degrees):")
     alpha = int(ask_float("  Alpha (70-120):  "))
     beta  = int(ask_float("  Beta  (90-140):  "))
-    gamma = int(ask_float("  Gamma   (0-30):  "))
+    gamma = int(ask_float("  Gamma   (-15-20):  "))
 # asks the user the rating on a scale of 0-10 and enforces the bounds.
     while True:
         score = ask_float(f"\n{objective.capitalize()} score (0-10, lower = better): ")
