@@ -49,7 +49,7 @@ def _postprocess_steps(preds: np.ndarray, tolerance_ratio: float = 0.2, isolatio
         return np.array([])
         
     final_preds = []
-    padded_preds = np.concatenate(([np.NINF], regularized_preds, [np.PINF]))
+    padded_preds = np.concatenate(([-np.inf], regularized_preds, [np.inf]))
     
     for i in range(1, len(padded_preds) - 1):
         dist_to_prev = padded_preds[i] - padded_preds[i-1]

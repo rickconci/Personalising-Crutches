@@ -1,6 +1,0 @@
-metric,value,unit
-participant,Charlie,
-geometry,10.5,
-cycle_duration_loss,0.1605482131102587,s
-y_rms_loss,8.566228445625434,m/s²
-x_rms_loss,9.554119198820624,m/s²

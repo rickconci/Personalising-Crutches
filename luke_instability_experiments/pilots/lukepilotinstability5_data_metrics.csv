@@ -1,0 +1,8 @@
+metric,value,unit
+participant,lukepilotinstability,
+alpha,85,°
+beta,140,°
+gamma,-9,°
+cycle_duration_loss,0.09706638788226186,s
+total_loss,97.06638788226186,
+n_steps,96,

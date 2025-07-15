@@ -1,0 +1,8 @@
+metric,value,unit
+participant,luketestjul14,
+alpha,110,°
+beta,135,°
+gamma,-3,°
+cycle_duration_loss,0.01205138171487608,s
+total_loss,12.05138171487608,
+n_steps,45,
