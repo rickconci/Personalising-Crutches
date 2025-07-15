@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Single ObjectiveBayesian Optimization for Crutch Instability Optimization
-Includes data collection, processing, BO, visualization
+Includes data collection, processing, BO, visualization.
+Full BO optimization across alpha, beta, and gamma. 
 
 1. Ask for participant name and demographics
 2. Ask for number of trials to run
@@ -417,53 +418,77 @@ def create_optimization_plots(df: pd.DataFrame, participant_name: str):
 def create_3d_optimization_plot(df: pd.DataFrame, participant_name: str):
     """Create 3D scatter plot showing optimization progress in parameter space."""
     
-    # Data should already be cleaned, but double-check
-    if len(df) < 2:
-        print("Not enough valid data points for 3D plot (need at least 2)")
-        return
-    
-    fig = plt.figure(figsize=(12, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    
-    # Color map for loss values
-    cmap = plt.get_cmap("RdYlGn_r")
-    norm = mpl.colors.Normalize(vmin=df["total_loss"].min(), vmax=df["total_loss"].max())
-    
-    # 3D scatter plot
-    scatter = ax.scatter(df["alpha"], df["beta"], df["gamma"], 
-                        c=df["total_loss"], cmap=cmap, norm=norm, s=100, edgecolors="k")
-    
-    # Label each point with trial number and mark penalty trials
-    for idx, (alpha, beta, gamma, loss, is_penalty) in df[["alpha", "beta", "gamma", "total_loss", "is_penalty"]].iterrows():
-        label = f"{idx + 1}P" if is_penalty else str(idx + 1)
-        color = "red" if is_penalty else "white"
-        ax.text(alpha, beta, gamma, label, fontsize=12, ha="center", va="center", 
-               color=color, fontweight='bold')
-    
-    # Draw lines between successive trials
-    for i in range(len(df) - 1):
-        ax.plot([df["alpha"].iloc[i], df["alpha"].iloc[i + 1]],
-                [df["beta"].iloc[i], df["beta"].iloc[i + 1]],
-                [df["gamma"].iloc[i], df["gamma"].iloc[i + 1]],
-                color="gray", alpha=0.6, linewidth=2)
-    
-    ax.set_xlabel("α (degrees)")
-    ax.set_ylabel("β (degrees)")
-    ax.set_zlabel("γ (degrees)")
-    ax.set_title(f"{participant_name}: 3D Parameter Space Optimization")
-    
-    # Add colorbar
-    plt.colorbar(scatter, label="Instability Loss (lower = more stable)")
-    
-    # Add legend for penalty trials
-    if any(df["is_penalty"] == True):
-        ax.text2D(0.02, 0.98, "P = Penalty trial (geometry rejected)", 
-                 transform=ax.transAxes, fontsize=10, verticalalignment='top',
-                 bbox=dict(boxstyle='round', facecolor='red', alpha=0.7))
-    
-    plt.tight_layout()
-    plt.savefig(f"{participant_name}_3d_optimization.png", dpi=300, bbox_inches='tight')
-    print(f"3D optimization plot saved to {participant_name}_3d_optimization.png")
+    try:
+        # Data should already be cleaned, but double-check
+        if len(df) < 2:
+            print("Not enough valid data points for 3D plot (need at least 2)")
+            return
+        
+        # Ensure all required columns exist and are numeric
+        required_cols = ["alpha", "beta", "gamma", "total_loss", "is_penalty"]
+        for col in required_cols:
+            if col not in df.columns:
+                print(f"Missing required column: {col}")
+                return
+        
+        # Convert to numeric and handle any non-numeric values
+        df_plot = df.copy()
+        for col in ["alpha", "beta", "gamma", "total_loss"]:
+            df_plot[col] = pd.to_numeric(df_plot[col], errors='coerce')
+        
+        # Remove any rows with NaN values
+        df_plot = df_plot.dropna(subset=["alpha", "beta", "gamma", "total_loss"])
+        
+        if len(df_plot) < 2:
+            print("Not enough valid numeric data points for 3D plot")
+            return
+        
+        fig = plt.figure(figsize=(12, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Color map for loss values
+        cmap = plt.get_cmap("RdYlGn_r")
+        norm = mpl.colors.Normalize(vmin=df_plot["total_loss"].min(), vmax=df_plot["total_loss"].max())
+        
+        # 3D scatter plot
+        scatter = ax.scatter(df_plot["alpha"], df_plot["beta"], df_plot["gamma"], 
+                            c=df_plot["total_loss"], cmap=cmap, norm=norm, s=100, edgecolors="k")
+        
+        # Label each point with trial number and mark penalty trials
+        for idx, (alpha, beta, gamma, loss, is_penalty) in df_plot[["alpha", "beta", "gamma", "total_loss", "is_penalty"]].iterrows():
+            label = f"{idx + 1}P" if is_penalty else str(idx + 1)
+            color = "red" if is_penalty else "white"
+            ax.text(alpha, beta, gamma, label, fontsize=12, ha="center", va="center", 
+                   color=color, fontweight='bold')
+        
+        # Draw lines between successive trials
+        for i in range(len(df_plot) - 1):
+            ax.plot([df_plot["alpha"].iloc[i], df_plot["alpha"].iloc[i + 1]],
+                    [df_plot["beta"].iloc[i], df_plot["beta"].iloc[i + 1]],
+                    [df_plot["gamma"].iloc[i], df_plot["gamma"].iloc[i + 1]],
+                    color="gray", alpha=0.6, linewidth=2)
+        
+        ax.set_xlabel("α (degrees)")
+        ax.set_ylabel("β (degrees)")
+        ax.set_zlabel("γ (degrees)")
+        ax.set_title(f"{participant_name}: 3D Parameter Space Optimization")
+        
+        # Add colorbar
+        plt.colorbar(scatter, label="Instability Loss (lower = more stable)")
+        
+        # Add legend for penalty trials
+        if any(df_plot["is_penalty"] == True):
+            ax.text2D(0.02, 0.98, "P = Penalty trial (geometry rejected)", 
+                     transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                     bbox=dict(boxstyle='round', facecolor='red', alpha=0.7))
+        
+        plt.tight_layout()
+        plt.savefig(f"{participant_name}_3d_optimization.png", dpi=300, bbox_inches='tight')
+        print(f"3D optimization plot saved to {participant_name}_3d_optimization.png")
+        
+    except Exception as e:
+        print(f"Error creating 3D plot: {e}")
+        print("Continuing without 3D plot...")
 
 # -------------- MAIN EXECUTION ------------------------------------------- #
 

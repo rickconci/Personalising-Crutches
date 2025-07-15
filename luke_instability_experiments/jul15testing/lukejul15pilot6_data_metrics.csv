@@ -1,0 +1,8 @@
+metric,value,unit
+participant,lukejul15pilot,
+alpha,90,°
+beta,135,°
+gamma,-9,°
+cycle_duration_loss,0.0013651216305062377,s
+total_loss,1.3651216305062377,
+n_steps,40,
