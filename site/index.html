@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personalised Crutches Optimisation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <header class="py-3 mb-4 shadow-sm">
+        <div class="container d-flex justify-content-between align-items-center">
+            <h1 class="fs-4 m-0">Personalised Crutches Optimisation</h1>
+            <span id="user-info" class="text-muted"></span>
+        </div>
+    </header>
+
+    <main class="container pb-4">
+        <!-- Screen: Experiment Setup -->
+        <div id="setup-screen">
+            <div class="row justify-content-center">
+                <div class="col-lg-8 col-xl-7">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="fs-5 m-0">Experiment Setup</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="user-id" class="form-label">User ID</label>
+                                <input type="text" class="form-control" id="user-id" placeholder="e.g., test_user_01">
+                            </div>
+                            <div class="mb-3">
+                                <label for="objective" class="form-label">Primary Objective</label>
+                                <select class="form-select" id="objective">
+                                    <option value="stability">Stability</option>
+                                    <option value="pain">Pain</option>
+                                    <option value="effort">Effort</option>
+                                </select>
+                            </div>
+                            <fieldset class="mb-3">
+                                <legend class="h6">User Characteristics</legend>
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label for="char-height" class="form-label small">Height (cm)</label>
+                                        <input type="number" class="form-control form-control-sm" id="char-height"
+                                            value="175">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="char-weight" class="form-label small">Weight (kg)</label>
+                                        <input type="number" class="form-control form-control-sm" id="char-weight"
+                                            value="70">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="char-forearm" class="form-label small">Forearm Length (cm)</label>
+                                        <input type="number" class="form-control form-control-sm" id="char-forearm"
+                                            value="45">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="char-fitness" class="form-label small">Fitness Level (1-5)</label>
+                                        <input type="number" class="form-control form-control-sm" id="char-fitness"
+                                            value="3">
+                                    </div>
+                                </div>
+                            </fieldset>
+                            <button id="start-experiment" class="btn btn-primary w-100">Start Experiment</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Screen: Main Experiment -->
+        <div id="main-screen" class="d-none">
+            <div class="row g-4">
+                <!-- Left Column: Controls & History -->
+                <div class="col-lg-5">
+                    <!-- Suggested Geometry Card -->
+                    <div class="card mb-4">
+                        <div class="card-header bg-primary text-white">
+                            <h3 class="fs-6 m-0"><i class="fas fa-flask me-2"></i>Next Suggested Geometry</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="suggestion-box" class="text-center">
+                                <!-- loader -->
+                                <div class="spinner-border" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div class="mt-3 d-flex justify-content-center gap-2">
+                                <button id="accept-geometry" class="btn btn-success">Accept & Record Trial</button>
+                                <button id="reject-geometry" class="btn btn-danger">Reject</button>
+                                <button id="alternative-geometry" class="btn btn-secondary">Use Alternative</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trial Recording Card -->
+                    <div id="trial-recording-card" class="card mb-4 d-none">
+                        <div class="card-header">
+                            <h3 class="fs-6 m-0"><i class="fas fa-file-upload me-2"></i>Record Trial Data</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Crutch Geometry Used</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">α</span>
+                                    <input type="number" id="current-alpha" class="form-control" step="0.5">
+                                    <span class="input-group-text">β</span>
+                                    <input type="number" id="current-beta" class="form-control" step="0.5">
+                                    <span class="input-group-text">γ</span>
+                                    <input type="number" id="current-gamma" class="form-control" step="0.5">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="accel-data" class="form-label">Upload Accelerometer Data</label>
+                                <input class="form-control" type="file" id="accel-data" accept=".csv,.txt">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Subjective Metrics (0=best, 6=worst)</label>
+                                <div class="slider-group">
+                                    <div class="d-flex justify-content-between"><label for="pain"
+                                            class="form-label small">Pain</label><span id="pain-value"
+                                            class="badge bg-secondary">3</span></div>
+                                    <input type="range" class="form-range" id="pain" min="0" max="6" value="3">
+                                </div>
+                                <div class="slider-group">
+                                    <div class="d-flex justify-content-between"><label for="effort"
+                                            class="form-label small">Effort</label><span id="effort-value"
+                                            class="badge bg-secondary">3</span></div>
+                                    <input type="range" class="form-range" id="effort" min="0" max="6" value="3">
+                                </div>
+                                <div class="slider-group">
+                                    <div class="d-flex justify-content-between"><label for="stability"
+                                            class="form-label small">Instability</label><span id="stability-value"
+                                            class="badge bg-secondary">3</span></div>
+                                    <input type="range" class="form-range" id="instability" min="0" max="6" value="3">
+                                </div>
+                            </div>
+                            <button id="submit-trial" class="btn btn-primary w-100">Submit Trial</button>
+                        </div>
+                    </div>
+
+                    <!-- Experiment History Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="fs-6 m-0"><i class="fas fa-history me-2"></i>Experiment History</h3>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table id="experiment-history" class="table table-sm table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Trial</th>
+                                            <th>α</th>
+                                            <th>β</th>
+                                            <th>γ</th>
+                                            <th>Loss</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Column: Results & Plots -->
+                <div class="col-lg-7">
+                    <div class="row g-4">
+                        <!-- Best Trial Card -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h3 class="fs-6 m-0"><i class="fas fa-trophy me-2"></i>Best Trial So Far</h3>
+                                </div>
+                                <div id="best-trial-box" class="card-body">
+                                    <p class="text-muted">No valid trials completed yet.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Optimization Plot Card -->
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3 class="fs-6 m-0"><i class="fas fa-chart-line me-2"></i>Optimization Progress
+                                    </h3>
+                                </div>
+                                <div class="card-body text-center">
+                                    <img id="opt-plot"
+                                        src="https://via.placeholder.com/600x400.png?text=Optimization+Plot+Will+Appear+Here"
+                                        class="img-fluid" alt="Optimization Plot">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Reject Modal -->
+    <div class="modal fade" id="reject-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reject Geometry</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You have rejected the suggested geometry. Please assign a high penalty loss value to discourage
+                        the optimizer from exploring this region again.</p>
+                    <label for="penalty-loss" class="form-label">Penalty Loss</label>
+                    <input type="number" id="penalty-loss" class="form-control" value="1000">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="submit-penalty" class="btn btn-primary">Submit Penalty</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="py-3 mt-4 bg-light">
+        <div class="container">
+            <p class="text-muted text-center small mb-0">© 2024 Personalised Crutches Optimisation Project</p>
+        </div>
+    </footer>
+
+    <!-- Toast container -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

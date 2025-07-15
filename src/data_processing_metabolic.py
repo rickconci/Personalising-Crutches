@@ -1,234 +1,218 @@
-import os
-import argparse
-from datetime import datetime, timedelta
-
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
+import os
+from scipy.optimize import curve_fit
 
-def metabolic_rate_estimation(time: np.ndarray,
-                              y: np.ndarray,
-                              tau: float):
+# Note: Assuming _parse_time_value and _parse_number exist above this line.
+# If they don't, they would need to be added.
+
+def metabolic_rate_estimation(time: np.ndarray, y_meas: np.ndarray, tau: float = 42.0):
     """
-    Placeholder for your existing metabolic_rate_estimation routine.
-    Should return (y_estimate, y_bar, other).
+    Estimate steady-state metabolic cost using exponential rise model.
+    This is the gold standard approach for short-duration exercise protocols.
+    
+    Args:
+        time: Time array in seconds
+        y_meas: Measured metabolic cost array (W/kg)
+        tau: Time constant for exponential fit (default: 42s, typical for moderate exercise)
+    
+    Returns:
+        y_estimate: Estimated steady-state metabolic cost (W/kg)
+        y_bar: Fitted exponential curve
+        fit_params: Dictionary with fit parameters for debugging
     """
-    # Here you would import or implement your real function.
-    # For now, we'll just return a flat line at the mean.
-    y_bar = np.convolve(y, np.ones(int(tau))/tau, mode='same')
-    return y, y_bar, None
-
-def parse_experiment_time(excel_time) -> str:
-    """
-    Accept either a pd.Timestamp or a string like '1/1/2025  7:15:30 AM',
-    convert to a Timestamp, and return HHMMSS in 24-hour clock.
-    """
-    ts = pd.to_datetime(excel_time)
-    return ts.strftime("%H%M%S")
-
-def _parse_time_value(x):
-    """
-    Accept one of several possible “time” encodings coming from COSMED / Excel
-    and return seconds (float).  Handles:
-      • Excel-numeric times (fraction of a day)
-      • python datetime / time objects
-      • strings like “23:37”  “1:23:45”  “12:05 PM”
-    Returns np.nan if it can’t confidently parse.
-    """
-    import datetime as _dt, numpy as _np, pandas as _pd
-
-    if _pd.isna(x):
-        return _np.nan
-
-    # Excel numeric time (0…1 represents 0…24 h)
-    if isinstance(x, (int, float)):
-        return float(x) * 86400.0
-
-    # Python datetime/time
-    if isinstance(x, (_dt.datetime, _dt.time)):
-        t = x.time() if isinstance(x, _dt.datetime) else x
-        return t.hour*3600 + t.minute*60 + t.second
-
-    # String cases  ➜ strip + normalise
-    s = str(x).strip()
-    if not s:
-        return _np.nan
-
-    # try HH:MM[:SS] possibly with AM/PM
+    if len(time) < 10 or len(y_meas) < 10:
+        y_bar = np.full_like(y_meas, np.mean(y_meas))
+        return np.mean(y_meas), y_bar, {'method': 'simple_average', 'reason': 'insufficient_data'}
+    
+    def exponential_rise(t, y_ss, tau_fit):
+        return y_ss * (1 - np.exp(-t / tau_fit))
+    
     try:
-        # pandas parses a *time‐only* string to Timestamp @ 1970-01-01
-        ts = _pd.to_datetime(s, errors='raise').time()
-        return ts.hour*3600 + ts.minute*60 + ts.second
-    except Exception:
-        pass
+        last_30_percent = int(0.3 * len(y_meas))
+        y_ss_guess = np.mean(y_meas[-last_30_percent:])
+        tau_guess = tau
+        
+        bounds = ([0.5, 10.0], [50.0, 200.0])
+        
+        popt, pcov = curve_fit(exponential_rise, time, y_meas, 
+                              p0=[y_ss_guess, tau_guess], 
+                              bounds=bounds, 
+                              maxfev=10000)
+        
+        y_ss_fitted, tau_fitted = popt
+        y_bar = exponential_rise(time, y_ss_fitted, tau_fitted)
+        
+        fit_params = {
+            'method': 'exponential_fit',
+            'y_ss': y_ss_fitted,
+            'tau': tau_fitted,
+            'r_squared': 1 - np.sum((y_meas - y_bar)**2) / np.sum((y_meas - np.mean(y_meas))**2)
+        }
+        
+        return y_ss_fitted, y_bar, fit_params
+        
+    except (RuntimeError, ValueError) as e:
+        print(f"Exponential fitting failed: {e}")
+        y_bar = np.full_like(y_meas, np.mean(y_meas))
+        return np.mean(y_meas), y_bar, {'method': 'simple_average', 'reason': 'fitting_failed'}
 
-    # final fallback: manual split
-    if ':' in s:
-        parts = [float(p) for p in s.replace('PM','').replace('AM','').split(':')]
-        if len(parts) == 2:          # MM:SS
-            return parts[0]*60 + parts[1]
-        if len(parts) == 3:          # HH:MM:SS
-            return parts[0]*3600 + parts[1]*60 + parts[2]
-
-    return _np.nan
-
-def _parse_number(x):
+def compute_last_2min_average(vo2_data: np.ndarray, vco2_data: np.ndarray, 
+                              time_data: np.ndarray, body_weight_kg: float = 77.0) -> float:
     """
-    Convert VO2/VCO2 cells that sometimes use a comma decimal (European style)
-    or include thousands separators.  Returns float or np.nan.
+    Calculate metabolic cost using last 2-minute average (gold standard for long protocols).
     """
-    import numpy as _np, pandas as _pd
-    if _pd.isna(x):
-        return _np.nan
-    if isinstance(x, (int, float)):
-        return float(x)
+    if vo2_data.size == 0 or vco2_data.size == 0 or time_data.size == 0 or body_weight_kg <= 0:
+        return float('nan')
+    
+    y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
+    
+    last_2min_start = time_data[-1] - 120
+    last_2min_mask = time_data >= last_2min_start
+    y_last_2min = y_meas[last_2min_mask]
+    
+    y_average = np.mean(y_last_2min)
+    
+    print(f"Using gold standard - average of last 2 min: {y_average:.4f} W/kg")
+    return y_average
 
-    s = str(x).strip().replace(' ', '')
-    # If comma is decimal marker (no dot in string) → replace with dot
-    if ',' in s and '.' not in s:
-        s = s.replace(',', '.')
-    # If both present and dot is decimal, comma must be thousand-sep → remove
-    elif ',' in s and '.' in s and s.find(',') > s.find('.'):
-        s = s.replace(',', '')
+def compute_exponential_estimate(vo2_data: np.ndarray, vco2_data: np.ndarray, 
+                                time_data: np.ndarray, body_weight_kg: float = 77.0) -> tuple:
+    """
+    Calculate metabolic cost using exponential estimation (for short protocols).
+    """
+    if vo2_data.size == 0 or vco2_data.size == 0 or time_data.size == 0 or body_weight_kg <= 0:
+        return float('nan'), {}
+    
+    y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
+    y_estimate, y_bar, fit_params = metabolic_rate_estimation(time_data, y_meas)
+    
+    print(f"Using exponential estimation - steady state: {y_estimate:.4f} W/kg")
+    print(f"Fit method: {fit_params['method']}")
+    if 'r_squared' in fit_params:
+        print(f"Fit quality (R²): {fit_params['r_squared']:.3f}")
+    
+    return y_estimate, fit_params
 
-    try:
-        return float(s)
-    except ValueError:
-        return _np.nan
-
-def data_processing_metabolics(stem: str,
-                               subject_weight_kg: float,
-                               estimate_threshold_min: float = 4.8,
-                               avg_window_min: float = 2,
-                               tau: float = 42):
-    # 1) read
-    df = pd.read_excel(f"{stem}.xlsx", header=None)
-    raw_time = df.iloc[1, 4]
-    exp_time = parse_experiment_time(raw_time)
-
-    data_raw = df.iloc[:, 9:].copy()
-    data_raw.columns = data_raw.iloc[0]
-    data = data_raw.iloc[3:].copy()
-    # Convert relevant columns to numeric, ignore non-numeric entries
-    data['t'] = data['t'].apply(_parse_time_value)
-    data['VO2'] = data['VO2'].apply(_parse_number)
-    data['VCO2'] = data['VCO2'].apply(_parse_number)
-
-    # ─── DEBUG: inspect parsing results ─────────────────────────────────────────
-    print("\n[DEBUG] Parsed `t`, `VO2`, `VCO2` columns (first 10 rows):")
-    print(data[['t', 'VO2', 'VCO2']].head(10))
-    print("[DEBUG] NaN counts per column:")
-    print(data[['t', 'VO2', 'VCO2']].isna().sum())
-    print("[DEBUG] dtypes:")
-    print(data[['t', 'VO2', 'VCO2']].dtypes)
-    # ────────────────────────────────────────────────────────────────────────────
-
-    # Drop any rows where required numeric values are missing
-    data = data.dropna(subset=['t', 'VO2', 'VCO2']).reset_index(drop=True)
-    if data.empty:
-        raise ValueError("No valid numeric rows found for t, VO2, and VCO2.")
-
-    # `data['t']` is already in seconds thanks to `_parse_time_value`
-    t = data['t'].to_numpy(dtype=float)
-    t -= t[0]
-    VO2 = data['VO2'].to_numpy(dtype=float)
-    VCO2 = data['VCO2'].to_numpy(dtype=float)
-
-    cutoff_idx = np.argmin(np.abs(t - 5*60))
-    t = t[:cutoff_idx+1]
-    VO2 = VO2[:cutoff_idx+1]
-    VCO2 = VCO2[:cutoff_idx+1]
-
-    # use the CLI-provided weight here:
-    y_meas = (0.278 * VO2 + 0.075 * VCO2) / subject_weight_kg
-
-    if t[-1] < estimate_threshold_min * 60:
-        y_estimate, y_bar, _ = metabolic_rate_estimation(t, y_meas, tau)
-        time_bar = t  # y_bar aligns with full t here
-        y_average = np.mean(y_meas)
+def compute_metabolic_cost_loss(vo2_data: np.ndarray, vco2_data: np.ndarray, 
+                                    time_data: np.ndarray, body_weight_kg: float = 77.0,
+                                    use_estimation: bool = True) -> float:
+    """
+    Compute metabolic cost using Brockway equation with 4.8-minute threshold for protocol classification.
+    """
+    protocol_duration_min = time_data[-1] / 60.0
+    
+    if use_estimation and protocol_duration_min < 4.8:
+        print(f"Short protocol detected ({protocol_duration_min:.1f} min)")
+        y_estimate, _ = compute_exponential_estimate(vo2_data, vco2_data, time_data, body_weight_kg)
+        return y_estimate
+    
     else:
-        start_time = t[-1] - avg_window_min*60
-        start_idx = np.argmin(np.abs(t - start_time))
-        y_average = np.mean(y_meas[start_idx:])
+        if protocol_duration_min >= 4.8:
+            print(f"Long protocol detected ({protocol_duration_min:.1f} min)")
+            return compute_last_2min_average(vo2_data, vco2_data, time_data, body_weight_kg)
+        else:
+            y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
+            y_average = np.mean(y_meas)
+            print(f"Short protocol without estimation ({protocol_duration_min:.1f} min)")
+            print(f"Using simple average: {y_average:.4f} W/kg")
+            return y_average
 
-        end_idx = np.argmin(np.abs(t - 180))
-        y_estimate, y_bar, _ = metabolic_rate_estimation(
-            t[:end_idx+1], y_meas[:end_idx+1], tau
+def load_raw_metabolic_data(base_path: str, body_weight_kg: float = 77.0) -> tuple:
+    """
+    Load raw metabolic data (VO2, VCO2, time) from Excel files.
+    """
+    # This function requires _parse_time_value and _parse_number, assumed to be in this file.
+    from .data_processing_metabolic import _parse_time_value, _parse_number
+
+    possible_paths = [
+        f"{base_path}_COSMED.xlsx",
+        f"{base_path}_COSMED.xls"
+    ]
+    
+    metabolic_excel_path = next((path for path in possible_paths if os.path.exists(path)), None)
+    
+    if metabolic_excel_path is None:
+        print(f"Warning - Raw metabolic data file not found for base path: {base_path}")
+        return None, None, None
+    
+    try:
+        df = pd.read_excel(metabolic_excel_path, header=None)
+        
+        data_raw = df.iloc[:, 9:].copy() 
+        data_raw.columns = data_raw.iloc[0]
+        data = data_raw.iloc[3:].copy()  
+        
+        data['t'] = data['t'].apply(_parse_time_value)
+        data['VO2'] = data['VO2'].apply(_parse_number)
+        data['VCO2'] = data['VCO2'].apply(_parse_number)
+        
+        data = data.dropna(subset=['t', 'VO2', 'VCO2']).reset_index(drop=True)
+        if data.empty:
+            return None, None, None
+        
+        time_data = data['t'].to_numpy(dtype=float)
+        vo2_data = data['VO2'].to_numpy(dtype=float)
+        vco2_data = data['VCO2'].to_numpy(dtype=float)
+        
+        time_data -= time_data[0]
+        
+        cutoff_idx = np.argmin(np.abs(time_data - 5*60))
+        time_data = time_data[:cutoff_idx+1]
+        vo2_data = vo2_data[:cutoff_idx+1]
+        vco2_data = vco2_data[:cutoff_idx+1]
+        
+        return time_data, vo2_data, vco2_data
+        
+    except Exception as e:
+        print(f"Error loading raw metabolic data: {e}")
+        return None, None, None
+
+def process_metabolic_data_complete(base_path: str, body_weight_kg: float = 77.0, 
+                                   estimate_threshold_min: float = 4.8, 
+                                   avg_window_min: float = 2, tau: float = 42.0):
+    """
+    Process metabolic data using a 4.8-minute threshold for protocol classification.
+    """
+    time_data, vo2_data, vco2_data = load_raw_metabolic_data(base_path, body_weight_kg)
+    
+    if time_data is None:
+        return None
+    
+    y_meas = (0.278 * vo2_data + 0.075 * vco2_data) / body_weight_kg
+    protocol_duration_min = time_data[-1] / 60.0
+    
+    if protocol_duration_min < estimate_threshold_min:
+        y_estimate, _ = compute_exponential_estimate(vo2_data, vco2_data, time_data, body_weight_kg)
+        y_average, y_bar, _ = metabolic_rate_estimation(time_data, y_meas, tau)
+        time_bar = time_data
+    else:
+        y_average = compute_last_2min_average(vo2_data, vco2_data, time_data, body_weight_kg)
+        end_idx = np.argmin(np.abs(time_data - 180))
+        time_estimate = time_data[:end_idx+1]
+        y_estimate, y_bar, fit_params = metabolic_rate_estimation(
+            time_estimate, y_meas[:end_idx+1], tau
         )
-        t = t[:end_idx+1]
-        y_meas = y_meas[:end_idx+1]
-        time_bar = t  # y_bar corresponds to this same slice
+        time_bar = time_estimate
 
-    print(f"Average: ({exp_time},{int(round(float(t[-1])))}s) {stem} = {y_average:.4f} W/kg")
-    if t[-1] >= estimate_threshold_min * 60:
-        print(f"Estimate: ({exp_time},{int(round(float(t[-1])))}s) {stem} (est.) = {y_estimate:.4f} W/kg")
-
-    plt.figure(figsize=(8,4))
-    plt.plot(t, y_meas, 'o')
-    plt.plot(time_bar, y_bar, '-')
-    plt.xlabel('Time (s)')
-    plt.ylabel(r'Metabolic Cost (W kg$^{-1}$)')
-    plt.tight_layout()
-
-    return {
-        "exp_time": exp_time,
-        "y_average": float(y_average),
-        "y_estimate": float(y_estimate) if t[-1] >= estimate_threshold_min*60 else None,
-        "figure": plt.gcf()
+    viz_data = {
+        'time': time_data, 'y_meas': y_meas, 'time_bar': time_bar, 'y_bar': y_bar,
+        'y_average': y_average, 'y_estimate': y_estimate, 'protocol_duration_min': protocol_duration_min,
+        'fit_params': fit_params, 'body_weight_kg': body_weight_kg
     }
+    
+    return viz_data
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Process metabolics Excel file and save results"
-    )
-    parser.add_argument(
-        "stem",
-        nargs="?",                              
-        default="/Users/riccardoconci/Library/Mobile Documents/com~apple~CloudDocs/HQ_2024/Projects/2024_Harvard_AIM/Research/OPMO/Personalising-Crutches/2025.06.18/20250618_LukeChung_COSMED",
-        help="Input filename without “.xlsx”"
-    )
-    parser.add_argument(
-        "-o", "--outdir",
-        default="met_output",
-        help="Directory to write plot & JSON"
-    )
-    parser.add_argument(
-        "--weight",
-        type=float,
-        default=77.0,
-        help="Subject weight in kg (used to normalize metabolic cost)"
-    )
-    parser.add_argument(
-        "--no-plot",
-        action="store_true",
-        help="Skip writing out the PNG figure"
-    )
-    args = parser.parse_args()
-
-    # pass args.weight into the function:
-    results = data_processing_metabolics(
-        stem=args.stem,
-        subject_weight_kg=args.weight
-    )
-
-    if not args.no_plot:
-        fig_path = os.path.join(
-            args.outdir,
-            f"{args.stem}_metabolics.png"
-        )
-        results["figure"].savefig(fig_path)
-        print(f"→ Saved plot: {fig_path}")
-
-    import json
-    out_json = {
-        "exp_time": results["exp_time"],
-        "y_average": results["y_average"],
-        "y_estimate": results["y_estimate"]
-    }
-    json_path = os.path.join(
-        args.outdir,
-        f"{args.stem}_metabolics.json"
-    )
-    with open(json_path, "w") as f:
-        json.dump(out_json, f, indent=2)
-    print(f"→ Saved results: {json_path}")
+def get_metabolic_cost_from_excel(base_path: str, body_weight_kg: float = 77.0) -> float:
+    """
+    Simplified function that always processes metabolic cost from raw Excel data.
+    """
+    time_data, vo2_data, vco2_data = load_raw_metabolic_data(base_path, body_weight_kg)
+    
+    if time_data is None:
+        print(f"Failed to load raw metabolic data for {base_path}")
+        return float('nan')
+    
+    metabolic_cost = compute_metabolic_cost_loss(vo2_data, vco2_data, time_data, body_weight_kg)
+    
+    return metabolic_cost

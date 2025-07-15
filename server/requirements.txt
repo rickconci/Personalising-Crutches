@@ -1,0 +1,10 @@
+Flask
+Flask-Cors
+gpy
+GPyOpt
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+werkzeug 
