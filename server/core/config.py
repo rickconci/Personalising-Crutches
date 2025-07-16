@@ -27,14 +27,20 @@ crutch_params_boundaries = [
     {'name': 'alpha', 'type': 'discrete', 'domain': np.arange(70, 125, 5).tolist()}, # alpha
     {'name': 'beta',  'type': 'discrete', 'domain': np.arange(90, 145, 5).tolist()}, # beta
     {'name': 'gamma', 'type': 'discrete', 'domain': np.arange(-12, 13, 3).tolist()},    # gamma
-    {'name': 'delta', 'type': 'discrete', 'domain': np.arange(0, 21, 2).tolist()}     # delta
 ]
 
+# Defines the step size for each parameter for discrete optimization
+CRUTCH_PARAM_STEPS = {
+    'alpha': 1,
+    'beta': 1,
+    'gamma': 1
+}
 
+# Parameters for the Gaussian Process kernel
 kernel_params = {
+    'variance': 1.0,
     'lengthscale': 3,
     'variance': 1,
-    'noise': 1.05
 }
 
 

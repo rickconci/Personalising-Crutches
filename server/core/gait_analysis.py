@@ -134,6 +134,63 @@ def detect_steps_unsupervised(force_signal: np.ndarray, time_signal: np.ndarray,
     
     return time_signal[peaks]
 
+def detect_steps_from_accel(accel_signal: np.ndarray, fs: float, smooth_factor: float = 0.25) -> np.ndarray:
+    """
+    Detects steps from a 2D accelerometer vector magnitude signal, ported from the
+    logic in Accelerometer_Processing_Program.html.
+    
+    Args:
+        accel_signal (np.ndarray): The 2D vector magnitude of the smoothed accelerometer data.
+        fs (float): The sampling frequency of the signal.
+
+    Returns:
+        np.ndarray: An array of indices corresponding to the detected steps.
+    """
+    if accel_signal.size == 0:
+        return np.array([])
+        
+    # 1. Calculate derivative of the signal
+    differential_duration = 0.24  # seconds, from JS code
+    differential_points = int(round(differential_duration * fs))
+    deriv = np.zeros_like(accel_signal)
+    if differential_points > 0:
+        # Note: The JS implementation used a simple difference, but np.gradient is more robust
+        deriv = np.gradient(accel_signal, 1/fs)
+
+    # 2. Adaptive threshold based on derivative signal's median absolute deviation
+    # Using 5.0 as a robust multiplier, similar to other algorithms in the project
+    threshold = np.median(np.abs(deriv)) * 5.0
+
+    # 3. Find upward crossings of the threshold
+    crossings = np.where((deriv[:-1] < threshold) & (deriv[1:] >= threshold))[0] + 1
+    if crossings.size == 0:
+        return np.array([])
+
+    # 4. Refine step start by finding peak in subsequent window of original signal
+    peak_indices = []
+    for i in crossings:
+        # Look in a ~100 sample window, as in the JS code
+        window_end = min(i + 100, len(accel_signal))
+        if window_end > i:
+            # Find the index of the max value *within the window*
+            max_in_window_idx = np.argmax(accel_signal[i:window_end])
+            # Add the start index of the window to get the index relative to the whole signal
+            peak_indices.append(i + max_in_window_idx)
+    
+    if not peak_indices:
+        return np.array([])
+        
+    # 5. Filter out peaks that are too close (10 samples in JS)
+    unique_peaks = []
+    last_peak_idx = -np.inf
+    for peak_idx in peak_indices:
+        if peak_idx - last_peak_idx > 10:
+            unique_peaks.append(peak_idx)
+            last_peak_idx = peak_idx
+            
+    return np.array(unique_peaks)
+
+
 def compute_cycle_variance(df: pd.DataFrame, step_times: np.ndarray) -> float:
     """
     Compute the variance of cycle durations (step intervals).

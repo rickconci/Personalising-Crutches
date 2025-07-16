@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const SERVER_URL = 'http://localhost:5000';
+    // By leaving this empty, the browser will make API requests to the same
+    // origin that served the page, which eliminates all CORS issues.
+    const SERVER_URL = '';
 
     // --- State Management ---
     let appState = {
@@ -36,8 +38,43 @@ document.addEventListener('DOMContentLoaded', function () {
         createParticipantModal: new bootstrap.Modal(document.getElementById('create-participant-modal')),
         remainingGeometriesList: document.getElementById('remaining-geometries'),
         trialsTableBody: document.querySelector('#all-trials-table tbody'),
-        trialModal: new bootstrap.Modal(document.getElementById('trial-modal')),
+        trialRunnerCol: document.getElementById('trial-runner-col'),
+        trialRunnerTitle: document.getElementById('trial-runner-title'),
         trialForm: document.getElementById('systematic-trial-form'),
+        connectDeviceBtn: document.getElementById('connect-device-btn'),
+        deviceStatus: document.getElementById('device-status'),
+        stopwatch: document.getElementById('stopwatch'),
+        startStopBtn: document.getElementById('start-stop-btn'),
+        analyzeDataBtn: document.getElementById('analyze-data-btn'),
+        plotsArea: document.getElementById('plots-area'),
+        forcePlotDiv: document.getElementById('force-plot-div'),
+        histPlotDiv: document.getElementById('hist-plot-div'),
+        stepInteractionArea: document.getElementById('step-interaction-area'),
+        stepList: document.getElementById('step-list'),
+        stepCount: document.getElementById('step-count'),
+        metricsAndSurveyArea: document.getElementById('metrics-and-survey-area'),
+        instabilityLossValue: document.getElementById('instability-loss-value'),
+        effortLossValue: document.getElementById('effort-loss-value'),
+        surveyArea: document.getElementById('survey-area'), // This is now part of the above
+        uploadDataBtn: document.getElementById('upload-data-btn'),
+        fileUploadInput: document.getElementById('file-upload-input'),
+    };
+
+    // --- Live Trial State & BLE ---
+    const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+    let bleServer = null;
+    let bleCharacteristic = null;
+    let trialDataBuffer = [];
+    let uploadedFile = null;
+
+    let trialState = {
+        timer: null,
+        startTime: null,
+        elapsed: 0,
+        running: false,
+        metrics: null, // To store calculated metrics
+        steps: [], // To store editable step times
+        rawData: null, // To store { force, timestamp } for recalculations
     };
 
     // Elements for BO Mode
@@ -199,12 +236,456 @@ document.addEventListener('DOMContentLoaded', function () {
     systematic.remainingGeometriesList.addEventListener('click', (e) => {
         if (e.target.tagName === 'BUTTON') {
             const geomId = e.target.dataset.geomId;
-            // Set hidden inputs in the modal form
+            const geometry = appState.geometries.find(g => g.id == geomId);
+
+            // Show the trial runner
+            systematic.trialRunnerCol.classList.remove('d-none');
+            systematic.trialRunnerTitle.textContent = `Run Trial: ${geometry.name}`;
+
+            // Set hidden inputs in the form
             systematic.trialForm.querySelector('#systematic-participant-id').value = appState.currentParticipant.id;
             systematic.trialForm.querySelector('#systematic-geometry-id').value = geomId;
-            systematic.trialModal.show();
+
+            resetTrialState();
         }
     });
+
+    function resetTrialState() {
+        // Reset buttons
+        systematic.connectDeviceBtn.disabled = false;
+        systematic.uploadDataBtn.disabled = false;
+        systematic.startStopBtn.disabled = true;
+        systematic.startStopBtn.innerHTML = '<i class="fas fa-play"></i> Start Trial';
+        systematic.startStopBtn.classList.replace('btn-danger', 'btn-success');
+        systematic.analyzeDataBtn.disabled = true;
+        // Reset status
+        systematic.deviceStatus.textContent = 'Status: Disconnected';
+        systematic.deviceStatus.classList.remove('alert-success');
+        systematic.deviceStatus.classList.add('alert-secondary');
+        // Reset stopwatch
+        stopStopwatch();
+        trialState.elapsed = 0;
+        updateStopwatchDisplay();
+        // Hide plots and survey
+        systematic.plotsArea.classList.add('d-none');
+        systematic.metricsAndSurveyArea.classList.add('d-none');
+        Plotly.purge(systematic.forcePlotDiv); // Clear the plot
+        Plotly.purge(systematic.histPlotDiv); // Clear the plot
+        systematic.instabilityLossValue.textContent = '-';
+        systematic.effortLossValue.textContent = '-';
+        systematic.stepInteractionArea.classList.add('d-none');
+        systematic.stepList.innerHTML = '';
+        uploadedFile = null;
+        trialState.metrics = null;
+        trialState.steps = [];
+        trialState.rawData = null;
+    }
+
+    // --- Step Editing & Recalculation ---
+
+    function recalculateAndUpdate() {
+        if (!trialState.rawData || trialState.steps.length < 2) {
+            // Not enough data to calculate, clear dependent views
+            systematic.instabilityLossValue.textContent = 'N/A';
+            systematic.effortLossValue.textContent = 'N/A';
+            Plotly.purge(systematic.histPlotDiv);
+            return;
+        }
+
+        const steps = trialState.steps.sort((a, b) => a - b);
+        const df = trialState.rawData;
+
+        // 1. Recalculate Metrics
+        const durations = steps.slice(1).map((step, i) => step - steps[i]);
+        const meanDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
+        const instability_loss = durations.map(d => Math.pow(d - meanDuration, 2)).reduce((a, b) => a + b, 0) / durations.length;
+
+        const effort_loss = instability_loss * 1500 + Math.random() * 5; // Same simulation
+        trialState.metrics = { instability_loss, effort_loss };
+
+        // 2. Update Metric Displays
+        systematic.instabilityLossValue.textContent = instability_loss.toFixed(4);
+        systematic.effortLossValue.textContent = effort_loss.toFixed(4);
+
+        // 3. Re-render Histogram
+        Plotly.react(systematic.histPlotDiv, [{
+            x: durations,
+            type: 'histogram',
+            nbinsx: 20,
+            name: 'Step Durations'
+        }], { title: "Step Duration Distribution", xaxis_title: "Duration (s)", yaxis_title: "Count" }, { responsive: true });
+
+        // 4. Re-render Step List
+        renderStepList();
+
+        // 5. Update markers on the main plot
+        const newStepX = [];
+        const newStepY = [];
+
+        function findClosestIndex(array, value) {
+            let bestIndex = 0;
+            let bestDiff = Infinity;
+            for (let i = 0; i < array.length; i++) {
+                const diff = Math.abs(array[i] - value);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        steps.forEach(stepTime => {
+            const index = findClosestIndex(df.timestamp, stepTime);
+            newStepX.push(df.timestamp[index]); // Use the actual timestamp from data for precision
+            newStepY.push(df.force[index]);
+        });
+
+        // Use Plotly.react for a more robust update.
+        // Get a fresh copy of the plot's data traces, keeping the non-step traces.
+        const originalTraces = systematic.forcePlotDiv.data.slice(0, 3);
+
+        // Create a new trace object for the updated steps
+        const newStepTrace = {
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Detected Steps',
+            x: newStepX,
+            y: newStepY,
+            marker: { symbol: 'x', color: 'red', size: 10 }
+        };
+
+        // Combine the original traces with the new step trace
+        const newData = [...originalTraces, newStepTrace];
+
+        // Use Plotly.newPlot to force a complete redraw, which is more robust
+        // than Plotly.react for this type of dynamic update.
+        Plotly.newPlot(systematic.forcePlotDiv, newData, systematic.forcePlotDiv.layout);
+    }
+
+    function renderStepList() {
+        systematic.stepList.innerHTML = '';
+        systematic.stepCount.textContent = trialState.steps.length;
+        trialState.steps.forEach((stepTime, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${stepTime.toFixed(3)}s</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-info py-0 px-1 inspect-step-btn" data-time="${stepTime}"><i class="fas fa-search-plus"></i></button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-1 delete-step-btn" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
+                </td>
+            `;
+            systematic.stepList.appendChild(row);
+        });
+    }
+
+    systematic.stepList.addEventListener('click', (e) => {
+        const target = e.target.closest('button');
+        if (!target) return;
+
+        if (target.classList.contains('delete-step-btn')) {
+            const index = parseInt(target.dataset.index, 10);
+            trialState.steps.splice(index, 1);
+            recalculateAndUpdate();
+        }
+
+        if (target.classList.contains('inspect-step-btn')) {
+            const time = parseFloat(target.dataset.time);
+            Plotly.relayout(systematic.forcePlotDiv, {
+                'xaxis.range': [time - 1.0, time + 1.0]
+            });
+        }
+    });
+
+
+    // --- Live Trial Workflow & Bluetooth ---
+
+    systematic.connectDeviceBtn.addEventListener('click', async () => {
+        if (!navigator.bluetooth) {
+            showNotification('Web Bluetooth is not available on this browser.', 'danger');
+            return;
+        }
+
+        try {
+            systematic.deviceStatus.textContent = 'Status: Searching...';
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ namePrefix: 'HIP_EXO' }],
+                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb'] // The service UUID
+            });
+
+            systematic.deviceStatus.textContent = 'Status: Connecting...';
+            device.addEventListener('gattserverdisconnected', onDisconnected);
+            bleServer = await device.gatt.connect();
+
+            const service = await bleServer.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+            bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+            systematic.deviceStatus.textContent = 'Status: Connected';
+            systematic.deviceStatus.classList.replace('alert-secondary', 'alert-success');
+            systematic.connectDeviceBtn.disabled = true;
+            systematic.startStopBtn.disabled = false;
+
+        } catch (error) {
+            showNotification(`Bluetooth Error: ${error.message}`, 'danger');
+            systematic.deviceStatus.textContent = 'Status: Connection Failed';
+        }
+    });
+
+    systematic.uploadDataBtn.addEventListener('click', () => {
+        systematic.fileUploadInput.click();
+    });
+
+    systematic.fileUploadInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        uploadedFile = file;
+        showNotification(`File "${file.name}" selected. Ready to analyze.`, 'info');
+
+        // Update UI for file upload path
+        systematic.connectDeviceBtn.disabled = true;
+        systematic.uploadDataBtn.disabled = true;
+        systematic.startStopBtn.disabled = true;
+        systematic.analyzeDataBtn.disabled = false;
+        systematic.deviceStatus.textContent = `File: ${file.name}`;
+        systematic.deviceStatus.classList.replace('alert-secondary', 'alert-info');
+    });
+
+    function onDisconnected() {
+        showNotification('Device disconnected.', 'warning');
+        resetTrialState();
+    }
+
+    async function startDataCollection() {
+        trialDataBuffer = []; // Clear previous data
+        await bleCharacteristic.startNotifications();
+        bleCharacteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+    }
+
+    async function stopDataCollection() {
+        await bleCharacteristic.stopNotifications();
+        bleCharacteristic.removeEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+    }
+
+    const dataParser = {
+        buffer: new Uint8Array(),
+        HEADER_MARKER: 0xAA,
+        FOOTER_MARKER: 0xBB,
+        PACKET_SIZE: 14, // 1 byte header + 3*4=12 bytes floats + 1 byte footer
+
+        append(data) {
+            const newBuffer = new Uint8Array(this.buffer.length + data.byteLength);
+            newBuffer.set(this.buffer);
+            newBuffer.set(new Uint8Array(data), this.buffer.length);
+            this.buffer = newBuffer;
+        },
+
+        parse() {
+            let packets = [];
+            let stillSearching = true;
+            while (stillSearching) {
+                if (this.buffer.length < this.PACKET_SIZE) {
+                    stillSearching = false;
+                    continue;
+                }
+
+                const headerIndex = this.buffer.indexOf(this.HEADER_MARKER);
+                if (headerIndex === -1) {
+                    // No header found, discard buffer
+                    this.buffer = new Uint8Array();
+                    stillSearching = false;
+                    continue;
+                }
+
+                // If header isn't at the start, discard the bytes before it
+                if (headerIndex > 0) {
+                    this.buffer = this.buffer.slice(headerIndex);
+                }
+
+                // Now that the header is at index 0, check if we have a full packet
+                if (this.buffer.length < this.PACKET_SIZE) {
+                    stillSearching = false;
+                    continue;
+                }
+
+                if (this.buffer[this.PACKET_SIZE - 1] === this.FOOTER_MARKER) {
+                    // We have a valid packet
+                    const packetData = this.buffer.slice(1, this.PACKET_SIZE - 1);
+                    const view = new DataView(packetData.buffer);
+                    const force = view.getFloat32(0, true); // true for little-endian
+                    const accX = view.getFloat32(4, true);
+                    const accY = view.getFloat32(8, true);
+                    packets.push({ force, accX, accY });
+
+                    // Remove the processed packet from the buffer
+                    this.buffer = this.buffer.slice(this.PACKET_SIZE);
+                } else {
+                    // Corrupted packet, discard the header and search again
+                    this.buffer = this.buffer.slice(1);
+                }
+            }
+            return packets;
+        }
+    };
+
+    function handleCharacteristicValueChanged(event) {
+        // `event.target.value` is a DataView. We need its underlying ArrayBuffer.
+        dataParser.append(event.target.value.buffer);
+        const newPackets = dataParser.parse();
+        if (newPackets.length > 0) {
+            trialDataBuffer.push(...newPackets);
+            // Optional: Log the latest data for debugging
+            // console.log(trialDataBuffer[trialDataBuffer.length-1]);
+        }
+    }
+
+
+    systematic.startStopBtn.addEventListener('click', async () => {
+        if (trialState.running) {
+            // Stopping the trial
+            stopStopwatch();
+            await stopDataCollection();
+            systematic.startStopBtn.disabled = true;
+            systematic.analyzeDataBtn.disabled = false;
+        } else {
+            // Starting the trial
+            await startDataCollection();
+            startStopwatch();
+            systematic.startStopBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Trial';
+            systematic.startStopBtn.classList.replace('btn-success', 'btn-danger');
+        }
+    });
+
+    function startStopwatch() {
+        if (trialState.running) return;
+        trialState.running = true;
+        trialState.startTime = Date.now() - trialState.elapsed;
+        trialState.timer = setInterval(updateStopwatchDisplay, 100); // Update every 100ms
+    }
+
+    function stopStopwatch() {
+        if (!trialState.running) return;
+        trialState.running = false;
+        clearInterval(trialState.timer);
+        trialState.elapsed = Date.now() - trialState.startTime;
+    }
+
+    function updateStopwatchDisplay() {
+        const now = Date.now();
+        const diff = trialState.running ? now - trialState.startTime : trialState.elapsed;
+
+        let minutes = Math.floor(diff / 60000);
+        let seconds = Math.floor((diff % 60000) / 1000);
+        let tenths = Math.floor((diff % 1000) / 100);
+
+        systematic.stopwatch.textContent =
+            `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths}`;
+    }
+
+    systematic.analyzeDataBtn.addEventListener('click', async () => {
+        const participantId = parseInt(systematic.trialForm.querySelector('#systematic-participant-id').value);
+        const geometryId = parseInt(systematic.trialForm.querySelector('#systematic-geometry-id').value);
+
+        try {
+            let results;
+            if (uploadedFile) {
+                // --- Handle File Upload ---
+                const formData = new FormData();
+                formData.append('file', uploadedFile);
+                formData.append('participantId', participantId);
+                formData.append('geometryId', geometryId);
+
+                // We cannot use the apiRequest helper for multipart/form-data
+                const response = await fetch(`${SERVER_URL}/api/trials/analyze`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error);
+                }
+                results = await response.json();
+
+            } else {
+                // --- Handle Live Data ---
+                const payload = {
+                    participantId,
+                    geometryId,
+                    trialData: trialDataBuffer,
+                };
+                results = await apiRequest('/api/trials/analyze', 'POST', payload);
+            }
+
+            showNotification(results.message, 'info');
+
+            // --- Render Plotly Charts ---
+            async function renderPlot(plotDiv, plotPath) {
+                const plotResponse = await fetch(`${SERVER_URL}${plotPath}?t=${new Date().getTime()}`);
+                if (!plotResponse.ok) throw new Error(`Failed to fetch plot: ${plotPath}`);
+                const plotHtml = await plotResponse.text();
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = plotHtml;
+                const plotlyGraphDiv = tempDiv.querySelector('.plotly-graph-div');
+                if (plotlyGraphDiv) {
+                    const plotData = JSON.parse(plotlyGraphDiv.dataset.raw);
+                    Plotly.newPlot(plotDiv, plotData.data, plotData.layout, { responsive: true });
+                } else {
+                    throw new Error("Could not find plot data in server response.");
+                }
+            }
+
+            // This part changes significantly
+
+            // 1. Store steps and raw data for editing
+            trialState.steps = results.steps.sort((a, b) => a - b);
+            const rawDataResponse = await fetch(`${SERVER_URL}${results.plots.timeseries}?t=${new Date().getTime()}`);
+            const rawDataHtml = await rawDataResponse.text();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = rawDataHtml;
+            const plotDiv = tempDiv.querySelector('.plotly-graph-div');
+            const plotData = JSON.parse(plotDiv.dataset.raw);
+
+            trialState.rawData = {
+                timestamp: plotData.data[0].x,
+                force: plotData.data[0].y
+            }
+
+            // 2. Initial Plotting
+            await renderPlot(systematic.forcePlotDiv, results.plots.timeseries);
+
+            // Re-attach the plotly click listener now that the plot exists
+            systematic.forcePlotDiv.on('plotly_click', (data) => {
+                // Guard: Only add steps if the user clicks on the main force trace (curveNumber 0)
+                const point = data.points[0];
+                if (point.curveNumber !== 0) {
+                    return;
+                }
+                const clickedTime = point.x;
+                if (trialState.steps.includes(clickedTime)) return;
+                trialState.steps.push(clickedTime);
+                recalculateAndUpdate();
+            });
+
+            await renderPlot(systematic.histPlotDiv, results.plots.histogram);
+
+            // 3. Initial Metric Display
+            trialState.metrics = results.metrics;
+            systematic.instabilityLossValue.textContent = results.metrics.instability_loss.toFixed(4);
+            systematic.effortLossValue.textContent = results.metrics.effort_loss.toFixed(4);
+
+            // 4. Render the interactive step list
+            renderStepList();
+            systematic.stepInteractionArea.classList.remove('d-none');
+
+            systematic.plotsArea.classList.remove('d-none');
+            systematic.metricsAndSurveyArea.classList.remove('d-none');
+            systematic.analyzeDataBtn.disabled = true;
+
+        } catch (error) {
+            showNotification(`Analysis failed: ${error.message}`, 'danger');
+        }
+    });
+
 
     systematic.saveParticipantBtn.addEventListener('click', async () => {
         const userId = systematic.newParticipantForm.querySelector('#new-participant-id').value.trim();
@@ -229,6 +710,7 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
             const newParticipant = await apiRequest('/api/participants', 'POST', payload);
             showNotification(`Participant "${newParticipant.user_id}" created successfully!`, 'success');
+
             systematic.createParticipantModal.hide();
             systematic.newParticipantForm.reset();
 
@@ -244,37 +726,29 @@ document.addEventListener('DOMContentLoaded', function () {
 
     systematic.trialForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const formData = new FormData();
-        const fileInput = systematic.trialForm.querySelector('input[type="file"]');
 
-        const data = {
+        // This form now handles saving the final results after analysis
+        const payload = {
             participantId: parseInt(systematic.trialForm.querySelector('#systematic-participant-id').value),
             geometryId: parseInt(systematic.trialForm.querySelector('#systematic-geometry-id').value),
             surveyResponses: {
-                effort: parseInt(systematic.trialForm.querySelector('#systematic-effort').value),
-                pain: parseInt(systematic.trialForm.querySelector('#systematic-pain').value),
-                stability: parseInt(systematic.trialForm.querySelector('#systematic-instability').value),
-            }
+                effort: parseInt(document.getElementById('systematic-effort').value),
+                pain: parseInt(document.getElementById('systematic-pain').value),
+                stability: parseInt(document.getElementById('systematic-instability').value),
+            },
+            metrics: trialState.metrics // Attach the calculated metrics
         };
 
-        formData.append('data', JSON.stringify(data));
-        formData.append('file', fileInput.files[0]);
-
         try {
-            // NOTE: Can't use apiRequest helper for multipart/form-data
-            const response = await fetch(`${SERVER_URL}/api/trials`, { method: 'POST', body: formData });
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error);
-            }
-            const newTrial = await response.json();
-
+            const newTrial = await apiRequest('/api/trials/save', 'POST', payload);
             showNotification('Systematic trial recorded successfully!', 'success');
-            systematic.trialModal.hide();
+
+            systematic.trialRunnerCol.classList.add('d-none'); // Hide trial runner
             systematic.trialForm.reset();
+            resetTrialState(); // Fully reset the panel
 
             // Refresh data
-            loadInitialData();
+            await loadInitialData();
             // Refresh the remaining geometries list
             systematic.participantSelect.dispatchEvent(new Event('change'));
 

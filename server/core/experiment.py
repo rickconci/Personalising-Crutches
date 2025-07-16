@@ -13,7 +13,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from . import config
 from .data_manager import DataManager
 from .bo import BayesOpt
-from .data_analysis import TrialRecorder, TrialAnalyzer
+from .data_analysis import TrialAnalyzer
 
 
 class Experiment:
