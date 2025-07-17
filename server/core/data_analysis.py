@@ -94,7 +94,13 @@ class TrialAnalyzer:
             # Instability and metabolic metrics
             cycle_duration_variance = compute_cycle_variance(raw_df, step_times)
             y_rms_loss = compute_mean_y_rms_per_cycle(raw_df, step_times)
-            metabolic_cost_loss = get_metabolic_cost_from_excel(self.base_path)
+            
+            # Try to get metabolic cost from Excel file if available, otherwise set to NaN
+            try:
+                metabolic_cost_loss = get_metabolic_cost_from_excel(self.base_path)
+            except Exception as e:
+                print(f"Metabolic data not available: {e}")
+                metabolic_cost_loss = float('nan')
             
             return {
                 **gait_metrics,

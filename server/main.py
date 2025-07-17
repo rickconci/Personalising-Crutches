@@ -9,6 +9,14 @@ import numpy as np
 from plotly.subplots import make_subplots
 from plotly.io import to_html
 
+# --- App Initialization ---
+DEBUG = True
+def debug_print(message):
+    """Prints a debug message only if the DEBUG flag is True."""
+    if DEBUG:
+        # Using a distinct prefix to easily spot these messages in the log
+        print(f"[DATA_FLOW] {message}")
+
 # --- Database & Core Logic ---
 from database import db, Participant, Geometry, Trial, create_and_populate_database
 from core.experiment import Experiment
@@ -45,7 +53,7 @@ def serve_index():
 
 # --- Helper Functions ---
 def participant_to_dict(p):
-    return {'id': p.id, 'user_id': p.user_id, 'characteristics': p.characteristics}
+    return {'id': p.id, 'name': p.name, 'full_name': p.full_name, 'characteristics': p.characteristics}
 
 def geometry_to_dict(g):
     return {'id': g.id, 'name': g.name, 'alpha': g.alpha, 'beta': g.beta, 'gamma': g.gamma}
@@ -56,12 +64,12 @@ def trial_to_dict(t):
     return {
         'id': t.id,
         'participant_id': t.participant_id,
-        'participant_user_id': t.participant.user_id,
+        'participant_full_name': t.participant.full_name,
         'geometry_id': t.geometry_id,
         'geometry_name': geom_name,
-        'alpha': t.alpha,
-        'beta': t.beta,
-        'gamma': t.gamma,
+        'alpha': t.geometry.alpha if t.geometry else None,
+        'beta': t.geometry.beta if t.geometry else None,
+        'gamma': t.geometry.gamma if t.geometry else None,
         'timestamp': t.timestamp.isoformat(),
         'survey_responses': t.survey_responses,
         'processed_features': t.processed_features,
@@ -81,19 +89,32 @@ def get_participants():
 @app.route('/api/participants', methods=['POST'])
 def create_participant():
     data = request.json
-    user_id = data.get('userId')
-    if not user_id: return jsonify({'error': 'User ID is required'}), 400
-    if Participant.query.filter_by(user_id=user_id).first():
-        return jsonify({'error': f'Participant with ID "{user_id}" already exists'}), 409
+    name = data.get('name')
+    if not name: 
+        return jsonify({'error': 'Name is required'}), 400
     
-    new_participant = Participant(user_id=user_id, characteristics=data.get('userCharacteristics'))
+    # Check if participant already exists
+    existing = Participant.query.filter_by(name=name).first()
+    if existing:
+        return jsonify({'error': f'Participant "{name}" already exists'}), 409
+    
+    new_participant = Participant(name=name, characteristics=data.get('userCharacteristics'))
     db.session.add(new_participant)
     db.session.commit()
     return jsonify(participant_to_dict(new_participant)), 201
 
-@app.route('/api/participants/<int:participant_id>', methods=['GET'])
+@app.route('/api/participants/<int:participant_id>', methods=['GET', 'DELETE'])
 def get_participant_details(participant_id):
     participant = Participant.query.get_or_404(participant_id)
+    
+    if request.method == 'DELETE':
+        # Delete all trials for this participant first
+        Trial.query.filter_by(participant_id=participant_id).delete()
+        # Delete the participant
+        db.session.delete(participant)
+        db.session.commit()
+        return jsonify({'message': 'Participant deleted successfully'}), 200
+    
     all_geometries = Geometry.query.all()
     # We only care about systematic trials for the checklist
     completed_trials = Trial.query.filter_by(participant_id=participant.id, source='systematic').all()
@@ -102,7 +123,7 @@ def get_participant_details(participant_id):
     return jsonify({
         'participant': participant_to_dict(participant),
         'completed_trials_count': len(completed_geometry_ids),
-        'remaining_geometries': [geometry_to_dict(g) for g in all_geometries if g.id not in completed_geometry_ids],
+        'all_geometries': [geometry_to_dict(g) for g in all_geometries],
     })
 
 @app.route('/api/geometries', methods=['GET'])
@@ -138,73 +159,88 @@ def create_systematic_trial():
 @app.route('/api/trials/analyze', methods=['POST'])
 def analyze_trial_data():
     """
-    Receives raw collected data (either as JSON or a file upload),
-    saves it, analyzes it, and returns plot paths.
+    Receives raw collected data and analyzes it, returning plot paths.
+    Raw data is saved immediately when trial stops.
     """
-    raw_data_path = ''
-    
-    # Check if the request is JSON or a file upload
-    if request.is_json:
-        # --- Handle Live Data from Bluetooth ---
-        data = request.json
-        participant_id = data.get('participantId')
-        geometry_id = data.get('geometryId')
-        trial_data = data.get('trialData')
-
-        if not all([participant_id, geometry_id, trial_data]):
-            return jsonify({'error': 'Missing required JSON data for analysis'}), 400
+    debug_print("--- /api/trials/analyze endpoint hit ---")
+    # --- Handle Live Data from Bluetooth ---
+    data = request.json
+    if not data:
+        debug_print("Request failed: No JSON data received.")
+        return jsonify({'error': 'No JSON data received'}), 400
         
-        trial_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(participant_id), str(geometry_id))
-        os.makedirs(trial_dir, exist_ok=True)
-        raw_data_path = os.path.join(trial_dir, 'live_recorded_data.csv')
-        
-        df = pd.DataFrame(trial_data)
-        df['relative_time_ms'] = [i * 5 for i in range(len(df))] 
-        df.to_csv(raw_data_path, index=False)
+    participant_id = data.get('participantId')
+    geometry_id = data.get('geometryId')
+    trial_data = data.get('trialData')
+    debug_print(f"Received data for Participant ID: {participant_id}, Geometry ID: {geometry_id}")
 
-    elif 'file' in request.files:
-        # --- Handle File Upload ---
-        file = request.files['file']
-        participant_id = request.form.get('participantId')
-        geometry_id = request.form.get('geometryId')
-
-        if not all([file, participant_id, geometry_id]):
-            return jsonify({'error': 'Missing file or IDs for analysis'}), 400
-            
-        trial_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(participant_id), str(geometry_id))
-        os.makedirs(trial_dir, exist_ok=True)
-        filename = secure_filename(file.filename)
-        raw_data_path = os.path.join(trial_dir, filename)
-        file.save(raw_data_path)
+    if not all([participant_id, geometry_id, trial_data]):
+        debug_print("Request failed: Missing required fields in JSON payload.")
+        return jsonify({'error': 'Missing required JSON data for analysis'}), 400
     
+    # --- DATA SHAPE CHECK 1: The data arrives from the frontend ---
+    if isinstance(trial_data, list) and len(trial_data) > 0:
+        debug_print(f"Received 'trialData' is a LIST with {len(trial_data)} items.")
+        debug_print(f"Shape of first item: {list(trial_data[0].keys())}")
+    elif isinstance(trial_data, dict):
+        debug_print(f"Received 'trialData' is a DICTIONARY. Keys: {list(trial_data.keys())}")
+        # This is where the bug was! This branch would have been taken on the second analysis call.
     else:
-        return jsonify({'error': 'Unsupported request format. Must be JSON or file upload.'}), 415
+        debug_print(f"Received 'trialData' is of an unexpected type: {type(trial_data)}")
+
+
+    trial_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(participant_id), str(geometry_id))
+    os.makedirs(trial_dir, exist_ok=True)
+    raw_data_path = os.path.join(trial_dir, 'live_recorded_data.csv')
+    
+    # --- DATA TRANSFORMATION 1: From JSON list/dict to Pandas DataFrame ---
+    df = pd.DataFrame(trial_data)
+    debug_print("Converted JSON to DataFrame.")
+    debug_print(f"DataFrame shape: {df.shape}")
+    debug_print(f"DataFrame columns: {list(df.columns)}")
+    df['relative_time_ms'] = [i * 5 for i in range(len(df))] 
+    df.to_csv(raw_data_path, index=False)
+    
+    debug_print(f"Saved raw data to: {raw_data_path}")
 
 
     # --- Run Analysis & Plotting ---
     try:
+        debug_print(f"Attempting to read back the CSV for analysis from {raw_data_path}")
+        if not os.path.exists(raw_data_path):
+            return jsonify({'error': f'CSV file not found at {raw_data_path}'}), 400
+            
         df = pd.read_csv(raw_data_path)
-        # Ensure standard column names
+        debug_print(f"Successfully read CSV. Shape: {df.shape}")
+        
+        # --- DATA TRANSFORMATION 2: Standardizing column names ---
         df.rename(columns={
             "relative_time_ms": "timestamp",
             "accX": "acc_x_data",
             "accY": "acc_y_data"
         }, inplace=True, errors='ignore')
+        debug_print(f"Renamed columns. Current columns: {list(df.columns)}")
+
 
         required_cols = ['timestamp', 'force', 'acc_x_data', 'acc_y_data']
-        if not all(col in df.columns for col in required_cols):
-            return jsonify({'error': f'CSV must contain all required columns: {required_cols}'}), 400
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            debug_print(f"Analysis failed: Missing required columns: {missing_cols}")
+            return jsonify({'error': f'CSV missing required columns: {missing_cols}. Available: {list(df.columns)}'}), 400
 
         # Ensure timestamp is in seconds
         if df['timestamp'].max() > 1000: # Heuristic for milliseconds
+             debug_print("Timestamp seems to be in ms, converting to seconds.")
              df['timestamp'] = (pd.to_numeric(df['timestamp'], errors='coerce') - df['timestamp'].iloc[0]) / 1000.0
         df.dropna(subset=required_cols, inplace=True)
         
         fs = 1.0 / np.median(np.diff(df['timestamp'].values))
+        debug_print(f"Calculated sampling frequency (fs): {fs:.2f} Hz")
         
         # Detect steps from the FORCE signal
         raw_steps_time = detect_steps_unsupervised(df['force'].values, df['timestamp'].values, fs)
         final_steps_time = _postprocess_steps(raw_steps_time)
+        debug_print(f"Detected {len(final_steps_time)} steps after post-processing.")
         
         # Get the force values at the detected step times for plotting
         # Create a temporary series for quick lookup
@@ -212,10 +248,12 @@ def analyze_trial_data():
 
         # --- Calculate Metrics ---
         instability_loss = compute_cycle_variance(df, final_steps_time)
-        # Placeholder for metabolic cost until live data is available
-        effort_loss = instability_loss * 1500 + np.random.rand() * 5 # Simulate a plausible relationship
+        debug_print(f"Calculated instability loss (cycle variance): {instability_loss:.4f}")
+        # Dummy metabolic cost for now
+        metabolic_cost = 3.2
 
         # --- Create Plots ---
+        debug_print("Creating Time Series and Histogram plots.")
         # Figure 1: Time Series Data
         fig_ts = go.Figure()
         fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['force'], mode='lines', name='Force'))
@@ -227,11 +265,28 @@ def analyze_trial_data():
         ))
         fig_ts.update_layout(title="Time Series Data", xaxis_title="Time (s)", yaxis_title="Signal Value")
 
-        # Figure 2: Step Duration Histogram
+        # Figure 2: Step Duration Histogram with Mean and Std Dev
         step_durations = np.diff(final_steps_time)
+        mean_duration = np.mean(step_durations)
+        std_duration = np.std(step_durations)
+        
         fig_hist = go.Figure()
         fig_hist.add_trace(go.Histogram(x=step_durations, nbinsx=20, name='Step Durations'))
-        fig_hist.update_layout(title="Step Duration Distribution", xaxis_title="Duration (s)", yaxis_title="Count")
+        
+        # Add mean line
+        fig_hist.add_vline(x=mean_duration, line_dash="dash", line_color="red", 
+                          annotation_text=f"Mean: {mean_duration:.3f}s")
+        
+        # Add standard deviation range
+        fig_hist.add_vrect(x0=mean_duration-std_duration, x1=mean_duration+std_duration,
+                          fillcolor="red", opacity=0.2, layer="below", line_width=0,
+                          annotation_text=f"±1σ: {std_duration:.3f}s")
+        
+        fig_hist.update_layout(
+            title=f"Step Duration Distribution (Mean: {mean_duration:.3f}s, Std: {std_duration:.3f}s)", 
+            xaxis_title="Duration (s)", 
+            yaxis_title="Count"
+        )
 
         # --- Save Plots ---
         def save_plot(fig, filename_suffix):
@@ -242,12 +297,13 @@ def analyze_trial_data():
             html_output_with_data = html_output.replace('<div ', f'<div data-raw=\'{raw_plot_json}\' ', 1)
             with open(plot_save_path, 'w') as f:
                 f.write(html_output_with_data)
+            debug_print(f"Saved plot to {plot_save_path}")
             return f'/data/plots/{plot_filename}'
 
         ts_plot_path = save_plot(fig_ts, 'timeseries')
         hist_plot_path = save_plot(fig_hist, 'histogram')
 
-        return jsonify({
+        final_payload = {
             'message': f'Analysis complete. Detected {len(final_steps_time)} steps.',
             'plots': {
                 'timeseries': ts_plot_path,
@@ -255,12 +311,19 @@ def analyze_trial_data():
             },
             'metrics': {
                 'instability_loss': instability_loss,
-                'effort_loss': effort_loss
+                'metabolic_cost': metabolic_cost,
+                'step_count': len(final_steps_time)
             },
             'steps': final_steps_time.tolist()
-        })
+        }
+        debug_print("--- Analysis successful. Sending response to frontend. ---")
+        return jsonify(final_payload)
 
     except Exception as e:
+        debug_print(f"--- Analysis CRASHED ---")
+        debug_print(f"Error: {str(e)}")
+        import traceback
+        debug_print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': f'An error occurred during analysis: {str(e)}'}), 500
 
 @app.route('/api/trials/save', methods=['POST'])
@@ -272,8 +335,7 @@ def save_trial_results():
             participant_id=data['participantId'],
             geometry_id=data['geometryId'],
             survey_responses=data['surveyResponses'],
-            instability_loss=data['metrics']['instability_loss'],
-            effort_loss=data['metrics']['effort_loss'],
+            processed_features=data['metrics'],
             source='systematic'
         )
         db.session.add(new_trial)
@@ -282,6 +344,18 @@ def save_trial_results():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to save trial: {str(e)}'}), 500
+
+@app.route('/api/trials/<int:trial_id>', methods=['DELETE'])
+def delete_trial(trial_id):
+    """Deletes a specific trial."""
+    trial = Trial.query.get_or_404(trial_id)
+    try:
+        db.session.delete(trial)
+        db.session.commit()
+        return jsonify({'message': 'Trial deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to delete trial: {str(e)}'}), 500
 
 
 # =================================================================================

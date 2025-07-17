@@ -10,13 +10,17 @@ db = SQLAlchemy()
 class Participant(db.Model):
     """Represents a participant in the study."""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(80), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     characteristics = db.Column(db.JSON, nullable=True)
     
     trials = db.relationship('Trial', backref='participant', lazy=True)
 
     def __repr__(self):
-        return f'<Participant {self.user_id}>'
+        return f'<Participant {self.name}>'
+    
+    @property
+    def full_name(self):
+        return self.name
 
 class Geometry(db.Model):
     """Represents a predefined crutch geometry."""
@@ -57,28 +61,26 @@ def create_and_populate_database(app):
         if Geometry.query.first() is None:
             print("Populating geometries...")
             
-            # Add a control geometry
-            control_geometry = Geometry(name="Control", alpha=15.0, beta=12.0, gamma=10.0)
-            db.session.add(control_geometry)
-
-            # Add 26 other placeholder geometries
-            # This creates a simple grid for demonstration
-            alphas = np.linspace(10, 20, 3)
-            betas = np.linspace(8, 16, 3)
-            gammas = np.linspace(5, 15, 3)
+            # Grid search parameters (specific combinations for grid search)
+            alphas = [75, 95, 115]
+            betas = [95, 115, 135]
+            gammas = [-9, 0, 9]
             
+            # Create grid search geometries with exact mapping
+            # G1-G9 for gamma -9, G10-G18 for gamma 0, G19-G27 for gamma 9
+            # Pattern: iterate through alpha, then beta, then gamma
             count = 1
-            for a in alphas:
-                for b in betas:
-                    for g in gammas:
-                        # Simple check to avoid duplicating control, assuming it's one of the generated values
-                        if count > 26: break
-                        if abs(a - 15.0) < 0.1 and abs(b - 12.0) < 0.1 and abs(g - 10.0) < 0.1:
-                            continue
-
-                        geom = Geometry(name=f"G{count}", alpha=round(a, 1), beta=round(b, 1), gamma=round(g, 1))
+            for alpha in alphas:
+                for beta in betas:
+                    for gamma in gammas:
+                        geom = Geometry(name=f"G{count}", alpha=alpha, beta=beta, gamma=gamma)
                         db.session.add(geom)
                         count += 1
+            
+            # Add control trial (always alpha=95, beta=115, gamma=0)
+            # This is the same geometry run before all other trials
+            control_geom = Geometry(name="Control", alpha=95, beta=115, gamma=0)
+            db.session.add(control_geom)
             
             db.session.commit()
             print("Geometries populated.")
