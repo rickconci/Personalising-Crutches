@@ -61,26 +61,33 @@ def create_and_populate_database(app):
         if Geometry.query.first() is None:
             print("Populating geometries...")
             
-            # Grid search parameters (specific combinations for grid search)
-            alphas = [75, 95, 115]
-            betas = [95, 115, 135]
+            # --- Define Geometries ---
+            # Gamma (γ) values: -9, 0, 9
+            # Beta (β) values: 110, 125, 140
+            # Alpha (α) values: 80, 95, 110
+            
+            # Add a "Control" geometry first, using the new median values
+            control_geometry = Geometry(name='Control', alpha=95, beta=125, gamma=0)
+            db.session.add(control_geometry)
+            
+            geometries = []
             gammas = [-9, 0, 9]
+            betas = [110, 125, 140]
+            alphas = [80, 95, 110]
             
-            # Create grid search geometries with exact mapping
-            # G1-G9 for gamma -9, G10-G18 for gamma 0, G19-G27 for gamma 9
-            # Pattern: iterate through alpha, then beta, then gamma
-            count = 1
-            for alpha in alphas:
+            g_number = 1
+            for gamma in gammas:
                 for beta in betas:
-                    for gamma in gammas:
-                        geom = Geometry(name=f"G{count}", alpha=alpha, beta=beta, gamma=gamma)
+                    for alpha in alphas:
+                        # Skip the one that matches the control
+                        if alpha == 95 and beta == 125 and gamma == 0:
+                            continue
+                        
+                        geom_name = f'G{g_number}'
+                        geom = Geometry(name=geom_name, alpha=alpha, beta=beta, gamma=gamma)
                         db.session.add(geom)
-                        count += 1
-            
-            # Add control trial (always alpha=95, beta=115, gamma=0)
-            # This is the same geometry run before all other trials
-            control_geom = Geometry(name="Control", alpha=95, beta=115, gamma=0)
-            db.session.add(control_geom)
+                        geometries.append(geom)
+                        g_number += 1
             
             db.session.commit()
             print("Geometries populated.")

@@ -3,6 +3,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // origin that served the page, which eliminates all CORS issues.
     const SERVER_URL = '';
 
+    // --- App Configuration ---
+    // Metabolic cost removed from grid search mode
+
     // --- State Management ---
     let appState = {
         mode: null, // 'systematic' or 'bo'
@@ -36,8 +39,10 @@ document.addEventListener('DOMContentLoaded', function () {
         newParticipantForm: document.getElementById('new-participant-form'),
         saveParticipantBtn: document.getElementById('save-participant-btn'),
         createParticipantModal: new bootstrap.Modal(document.getElementById('create-participant-modal')),
-        remainingGeometriesList: document.getElementById('remaining-geometries'),
-        trialsTableBody: document.querySelector('#all-trials-table tbody'),
+        deleteParticipantBtn: document.getElementById('delete-participant-btn'),
+        gridSearchTables: document.getElementById('grid-search-tables'),
+        participantTrialsTableBody: document.querySelector('#participant-trials-table tbody'),
+        participantTrialsTitle: document.getElementById('participant-trials-title'),
         trialRunnerCol: document.getElementById('trial-runner-col'),
         trialRunnerTitle: document.getElementById('trial-runner-title'),
         trialForm: document.getElementById('systematic-trial-form'),
@@ -45,7 +50,6 @@ document.addEventListener('DOMContentLoaded', function () {
         deviceStatus: document.getElementById('device-status'),
         stopwatch: document.getElementById('stopwatch'),
         startStopBtn: document.getElementById('start-stop-btn'),
-        analyzeDataBtn: document.getElementById('analyze-data-btn'),
         plotsArea: document.getElementById('plots-area'),
         forcePlotDiv: document.getElementById('force-plot-div'),
         histPlotDiv: document.getElementById('hist-plot-div'),
@@ -54,10 +58,12 @@ document.addEventListener('DOMContentLoaded', function () {
         stepCount: document.getElementById('step-count'),
         metricsAndSurveyArea: document.getElementById('metrics-and-survey-area'),
         instabilityLossValue: document.getElementById('instability-loss-value'),
-        effortLossValue: document.getElementById('effort-loss-value'),
         surveyArea: document.getElementById('survey-area'), // This is now part of the above
         uploadDataBtn: document.getElementById('upload-data-btn'),
+
         fileUploadInput: document.getElementById('file-upload-input'),
+        discardTrialBtn: document.getElementById('discard-trial-btn'),
+        closeTrialRunnerBtn: document.getElementById('close-trial-runner-btn'),
     };
 
     // --- Live Trial State & BLE ---
@@ -125,6 +131,22 @@ document.addEventListener('DOMContentLoaded', function () {
         toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
     }
 
+    function showTrialManagementScreen(participant) {
+        showScreen('systematic');
+        
+        // Update header
+        systematic.participantTrialsTitle.textContent = `${participant.name}'s Trial Management`;
+        const characteristics = participant.characteristics || {};
+        const details = `Age: ${characteristics.age || 'N/A'}, Height: ${characteristics.height || 'N/A'} cm, Weight: ${characteristics.weight || 'N/A'} kg`;
+        systematic.trialRunnerTitle.textContent = details;
+        
+        // Load participant data
+        renderParticipantTrialsTable(participant.id);
+        
+        // Load geometries
+        renderRemainingGeometries(appState.geometries);
+    }
+
     // --- Initial Load ---
     async function loadInitialData() {
         try {
@@ -132,20 +154,27 @@ document.addEventListener('DOMContentLoaded', function () {
             appState.geometries = await apiRequest('/api/geometries');
             appState.trials = await apiRequest('/api/trials');
             populateParticipantSelects();
-            renderAllTrialsTable();
+            renderParticipantTrialsTable(null);
         } catch (error) {
             showNotification(`Failed to load initial data: ${error.message}`, 'danger');
         }
     }
 
+    // Start with mode selection screen
+    loadInitialData();
+
+    // --- Initial UI Setup based on Config ---
+    // Metabolic cost removed from grid search mode
+
+
     function populateParticipantSelects() {
-        // Populate for both systematic and BO mode
+        // Populate for participant selection screen and BO mode
         [systematic.participantSelect, bo.participantSelect].forEach(select => {
             select.innerHTML = '<option selected disabled>Choose...</option>';
             appState.participants.forEach(p => {
                 const option = document.createElement('option');
                 option.value = p.id;
-                option.textContent = p.user_id;
+                option.textContent = p.full_name;
                 select.appendChild(option);
             });
         });
@@ -162,79 +191,331 @@ document.addEventListener('DOMContentLoaded', function () {
         showScreen('bo');
     });
 
+    // --- Home Button Logic ---
+    document.getElementById('home-button').addEventListener('click', () => {
+        appState.mode = null;
+        showScreen('modeSelection');
+    });
 
-    // --- Systematic Mode Logic ---
-    function renderAllTrialsTable() {
-        systematic.trialsTableBody.innerHTML = '';
-        if (appState.trials.length === 0) {
-            systematic.trialsTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No trials recorded yet.</td></tr>`;
-            return;
-        }
-        appState.trials.forEach(t => {
-            const row = document.createElement('tr');
-            row.dataset.participantId = t.participant_id; // Add data attribute for filtering
-            row.innerHTML = `
-                <td>${new Date(t.timestamp).toLocaleString()}</td>
-                <td>${t.participant_user_id}</td>
-                <td>${t.geometry_name}</td>
-                <td>${t.alpha?.toFixed(1) ?? '-'}</td>
-                <td>${t.beta?.toFixed(1) ?? '-'}</td>
-                <td>${t.gamma?.toFixed(1) ?? '-'}</td>
-                <td><span class="badge bg-${t.source === 'bo' ? 'success' : 'primary'}">${t.source}</span></td>
-            `;
-            systematic.trialsTableBody.appendChild(row);
-        });
-    }
-
-    function filterTrialsTable(participantId) {
-        const rows = systematic.trialsTableBody.querySelectorAll('tr');
-        rows.forEach(row => {
-            // If participantId is null/empty, show all rows.
-            // Otherwise, show only rows that match the participantId.
-            if (!participantId || row.dataset.participantId === participantId) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    }
-
+    // --- Participant Selection Logic ---
     systematic.participantSelect.addEventListener('change', async (e) => {
         const participantId = e.target.value;
-        filterTrialsTable(participantId); // Filter the main table
-
+        systematic.deleteParticipantBtn.disabled = !participantId;
+        
         if (!participantId) {
-            systematic.remainingGeometriesList.innerHTML = `<li class="list-group-item text-center text-muted">Select a participant to see remaining trials.</li>`;
+            systematic.gridSearchTables.innerHTML = `<div class="text-center text-muted">Select a participant to see grid search trials.</div>`;
+            renderParticipantTrialsTable(null);
             return;
-        };
+        }
+        
         try {
             const data = await apiRequest(`/api/participants/${participantId}`);
             appState.currentParticipant = data.participant;
-            renderRemainingGeometries(data.remaining_geometries);
+            displayParticipantDetails(data.participant); // Display details
+            renderParticipantTrialsTable(participantId);
+            renderRemainingGeometries(data.all_geometries);
         } catch (error) {
             showNotification(`Error fetching participant details: ${error.message}`, 'danger');
         }
     });
 
-    function renderRemainingGeometries(geometries) {
-        systematic.remainingGeometriesList.innerHTML = '';
-        if (geometries.length === 0) {
-            systematic.remainingGeometriesList.innerHTML = `<li class="list-group-item text-center text-muted">All systematic trials complete for this participant!</li>`;
+    systematic.saveParticipantBtn.addEventListener('click', async () => {
+        const name = systematic.newParticipantForm.querySelector('#new-participant-name').value.trim();
+        if (!name) {
+            showNotification('Name is required.', 'danger');
             return;
         }
-        geometries.forEach(g => {
-            const li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between align-items-center';
-            li.innerHTML = `
-                <span><strong>${g.name}</strong> (α:${g.alpha}, β:${g.beta}, γ:${g.gamma})</span>
-                <button class="btn btn-sm btn-primary" data-geom-id="${g.id}">Start Trial</button>
+
+        const payload = {
+            name: name,
+            userCharacteristics: {
+                age: parseInt(document.getElementById('char-age').value) || null,
+                sex: document.getElementById('char-sex').value,
+                height: parseFloat(document.getElementById('char-height').value) || null,
+                weight: parseFloat(document.getElementById('char-weight').value) || null,
+                forearm_length: parseFloat(document.getElementById('char-forearm').value) || null,
+                activity_level: document.getElementById('char-activity').value,
+                previous_crutch_experience: document.querySelector('input[name="crutch-experience"]:checked').value === 'true',
+            }
+        };
+
+        try {
+            const newParticipant = await apiRequest('/api/participants', 'POST', payload);
+            showNotification(`Participant "${newParticipant.full_name}" created successfully!`, 'success');
+
+            systematic.createParticipantModal.hide();
+            systematic.newParticipantForm.reset();
+
+            // Refresh participant list, select the new one, and trigger the change event
+            await loadInitialData();
+            systematic.participantSelect.value = newParticipant.id;
+            systematic.participantSelect.dispatchEvent(new Event('change'));
+
+        } catch (error) {
+            showNotification(`Error creating participant: ${error.message}`, 'danger');
+        }
+    });
+
+    systematic.deleteParticipantBtn.addEventListener('click', async () => {
+        const participantId = systematic.participantSelect.value;
+        if (!participantId) return;
+        
+        if (confirm('Are you sure you want to delete this participant? This action cannot be undone.')) {
+            try {
+                await apiRequest(`/api/participants/${participantId}`, 'DELETE');
+                showNotification('Participant deleted successfully', 'success');
+                
+                // Refresh the page to update all data
+                location.reload();
+            } catch (error) {
+                showNotification(`Error deleting participant: ${error.message}`, 'danger');
+            }
+        }
+    });
+
+    // --- Systematic Mode Logic ---
+    function displayParticipantDetails(participant) {
+        const detailsFooter = document.getElementById('participant-details-footer');
+        const detailsTableBody = document.getElementById('participant-details-table');
+        detailsTableBody.innerHTML = ''; // Clear previous details
+
+        if (!participant || !participant.characteristics) {
+            detailsFooter.classList.add('d-none');
+            return;
+        }
+
+        const chars = participant.characteristics;
+        const detailsMap = {
+            "Age": chars.age,
+            "Sex": chars.sex,
+            "Height": chars.height ? `${chars.height} cm` : 'N/A',
+            "Weight": chars.weight ? `${chars.weight} kg` : 'N/A',
+            "Forearm Length": chars.forearm_length ? `${chars.forearm_length} cm` : 'N/A',
+            "Activity Level": chars.activity_level,
+            "Crutch Experience": chars.previous_crutch_experience ? 'Yes' : 'No'
+        };
+
+        for (const [key, value] of Object.entries(detailsMap)) {
+            const row = detailsTableBody.insertRow();
+            row.innerHTML = `<th class="text-muted">${key}</th><td>${value ?? 'N/A'}</td>`;
+        }
+
+        detailsFooter.classList.remove('d-none');
+    }
+
+    function renderParticipantTrialsTable(participantId) {
+        systematic.participantTrialsTableBody.innerHTML = '';
+        
+        if (!participantId) {
+            systematic.participantTrialsTitle.textContent = 'Participant Trials';
+            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-muted">Select a participant to see their trials.</td></tr>`;
+            return;
+        }
+        
+        const participant = appState.participants.find(p => p.id == participantId);
+        const participantTrials = appState.trials.filter(t => t.participant_id == participantId);
+        
+        systematic.participantTrialsTitle.textContent = `${participant.name}'s Trials`;
+        
+        if (participantTrials.length === 0) {
+            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-muted">No trials recorded yet for this participant.</td></tr>`;
+            return;
+        }
+
+        // Sort trials: Control first, then by G-number
+        participantTrials.sort((a, b) => {
+            const aIsControl = a.geometry_name === 'Control';
+            const bIsControl = b.geometry_name === 'Control';
+            if (aIsControl && !bIsControl) return -1;
+            if (!aIsControl && bIsControl) return 1;
+
+            const aNum = parseInt(a.geometry_name.substring(1));
+            const bNum = parseInt(b.geometry_name.substring(1));
+            return aNum - bNum;
+        });
+        
+        participantTrials.forEach((t, index) => {
+            const row = document.createElement('tr');
+            row.dataset.trialId = t.id;
+            const trialDate = new Date(t.timestamp);
+            const today = new Date();
+            const isToday = trialDate.toDateString() === today.toDateString();
+            
+            row.innerHTML = `
+                <td>${t.geometry_name === 'Control' ? 'Control' : index}</td>
+                <td>${t.geometry_name}</td>
+                <td>${t.alpha ?? '-'}°</td>
+                <td>${t.beta ?? '-'}°</td>
+                <td>${t.gamma ?? '-'}°</td>
+                <td>${isToday ? 'Today' : trialDate.toLocaleDateString()}</td>
+                <td>${trialDate.toLocaleTimeString()}</td>
+                <td>${Number(t.processed_features?.step_count ?? NaN) || '-'}</td>
+                <td>${t.processed_features?.instability_loss !== undefined ? Number(t.processed_features.instability_loss).toFixed(4) : '-'}</td>
+                <td>${t.survey_responses?.sus_score !== undefined ? Number(t.survey_responses.sus_score).toFixed(2) : '-'}</td>
+                <td>${t.survey_responses?.nrs_score !== undefined ? t.survey_responses.nrs_score : '-'}</td>
+                <td>${t.survey_responses?.tlx_score !== undefined ? t.survey_responses.tlx_score : '-'}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-danger delete-trial-btn" data-trial-id="${t.id}" data-geometry-id="${t.geometry_id}">
+                        🗑️
+                    </button>
+                </td>
             `;
-            systematic.remainingGeometriesList.appendChild(li);
+            systematic.participantTrialsTableBody.appendChild(row);
         });
     }
 
-    systematic.remainingGeometriesList.addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') {
+    async function deleteTrial(trialId, geometryId) {
+        try {
+            await apiRequest(`/api/trials/${trialId}`, 'DELETE');
+            showNotification('Trial deleted successfully', 'success');
+            
+            // Remove trial from appState
+            appState.trials = appState.trials.filter(t => t.id != trialId);
+            
+            // Refresh the participant trials table, survey table, and grid
+            const participantId = systematic.participantSelect.value;
+            renderParticipantTrialsTable(participantId);
+            
+            // Re-render the grid to update button colors
+            if (appState.currentParticipant) {
+                const remainingGeometries = appState.geometries.filter(g => 
+                    !appState.trials.some(t => t.participant_id === appState.currentParticipant.id && t.geometry_id === g.id)
+                );
+                renderRemainingGeometries(remainingGeometries);
+            }
+        } catch (error) {
+            showNotification(`Error deleting trial: ${error.message}`, 'danger');
+        }
+    }
+
+    function renderRemainingGeometries(allGeometries) {
+        const gridSearchTables = document.getElementById('grid-search-tables');
+        gridSearchTables.innerHTML = '';
+        
+        if (allGeometries.length === 0) {
+            gridSearchTables.innerHTML = `<div class="text-center text-muted">No geometries available!</div>`;
+            return;
+        }
+
+        // Get completed trials for this participant
+        const completedTrials = appState.trials.filter(t => t.participant_id === appState.currentParticipant.id);
+        const completedGeometryIds = new Set(completedTrials.map(t => t.geometry_id));
+
+        // Group geometries by gamma value
+        const gammaGroups = {};
+        const controlGroups = {};
+        allGeometries.forEach(g => {
+            if (g.name.startsWith('Control')) {
+                if (!controlGroups[g.gamma]) {
+                    controlGroups[g.gamma] = [];
+                }
+                controlGroups[g.gamma].push(g);
+            } else {
+                if (!gammaGroups[g.gamma]) {
+                    gammaGroups[g.gamma] = [];
+                }
+                gammaGroups[g.gamma].push(g);
+            }
+        });
+
+        // Add control trial at the very top
+        if (Object.keys(controlGroups).length > 0) {
+            const controlGeometry = Object.values(controlGroups)[0][0];
+            const isControlCompleted = completedGeometryIds.has(controlGeometry.id);
+            const controlContainer = document.createElement('div');
+            controlContainer.className = 'mb-4';
+
+            let controlButtonHtml;
+            if (isControlCompleted) {
+                controlButtonHtml = `
+                    <button class="btn btn-sm btn-success" disabled>
+                        Completed<br><small>CONTROL</small>
+                    </button>
+                `;
+            } else {
+                controlButtonHtml = `
+                    <button class="btn btn-sm btn-warning" data-geom-id="${controlGeometry.id}">
+                        CONTROL<br><small>Data Collection</small>
+                    </button>
+                `;
+            }
+
+            controlContainer.innerHTML = `
+                <h5 class="mb-3 text-warning">Control Trial (α:95°, β:125°, γ:0°)</h5>
+                <div class="mb-3">
+                    ${controlButtonHtml}
+                </div>
+                <hr class="my-4 border-2 border-secondary">
+            `;
+            gridSearchTables.appendChild(controlContainer);
+        }
+        
+        // Dynamically create grid tables for each gamma value
+        Object.keys(gammaGroups).sort((a, b) => parseInt(a) - parseInt(b)).forEach(gamma => {
+            const groupGeometries = gammaGroups[gamma];
+
+            // Get unique, sorted alpha and beta values for this gamma group
+            const alphaValues = [...new Set(groupGeometries.map(g => g.alpha))].sort((a, b) => a - b);
+            const betaValues = [...new Set(groupGeometries.map(g => g.beta))].sort((a, b) => a - b);
+
+            const tableContainer = document.createElement('div');
+            tableContainer.className = 'mb-4';
+            tableContainer.innerHTML = `<h5 class="mb-3">Gamma (γ): ${gamma}°</h5>`;
+            
+            const tableDiv = document.createElement('div');
+            tableDiv.className = 'table-responsive';
+            
+            tableDiv.innerHTML = `
+                <table class="table table-sm table-bordered grid-table" data-gamma="${gamma}">
+                    <thead class="table-light">
+                        <tr>
+                            <th></th>
+                            <th class="text-center" colspan="${betaValues.length}">Beta (β)</th>
+                        </tr>
+                        <tr>
+                            <th>Alpha (α)</th>
+                            ${betaValues.map(beta => `<th class="text-center">${beta}°</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${alphaValues.map(alpha => `
+                            <tr>
+                                <th class="table-light text-center">${alpha}°</th>
+                                ${betaValues.map(beta => {
+                                    const geom = groupGeometries.find(g => g.alpha === alpha && g.beta === beta);
+                                    if (geom) {
+                                        const isCompleted = completedGeometryIds.has(geom.id);
+                                        if (isCompleted) {
+                                            return `<td class="text-center">
+                                                <button class="btn btn-sm btn-success" disabled>
+                                                    Completed<br><small>${geom.name}</small>
+                                                </button>
+                                            </td>`;
+                                        } else {
+                                            return `<td class="text-center">
+                                                <button class="btn btn-sm btn-primary" data-geom-id="${geom.id}">
+                                                    ${geom.name}<br><small>Data Collection</small>
+                                                </button>
+                                            </td>`;
+                                        }
+                                    } else {
+                                        return `<td class="text-center text-muted">-</td>`;
+                                    }
+                                }).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            tableContainer.appendChild(tableDiv);
+            gridSearchTables.appendChild(tableContainer);
+        });
+    }
+
+    // Event delegation for grid search tables and delete trial buttons
+    document.addEventListener('click', (e) => {
+        // Handle grid search table buttons
+        if (e.target.closest('#grid-search-tables') && e.target.tagName === 'BUTTON' && e.target.dataset.geomId) {
             const geomId = e.target.dataset.geomId;
             const geometry = appState.geometries.find(g => g.id == geomId);
 
@@ -248,16 +529,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
             resetTrialState();
         }
+        
+        // Handle delete trial buttons
+        if (e.target.closest('.delete-trial-btn')) {
+            const trialId = e.target.closest('.delete-trial-btn').dataset.trialId;
+            const geometryId = e.target.closest('.delete-trial-btn').dataset.geometryId;
+            
+            if (confirm('Are you sure you want to delete this trial? This action cannot be undone.')) {
+                deleteTrial(trialId, geometryId);
+            }
+        }
     });
 
     function resetTrialState() {
         // Reset buttons
         systematic.connectDeviceBtn.disabled = false;
-        systematic.uploadDataBtn.disabled = false;
-        systematic.startStopBtn.disabled = true;
+        systematic.startStopBtn.disabled = true; // Disabled until device is connected
         systematic.startStopBtn.innerHTML = '<i class="fas fa-play"></i> Start Trial';
         systematic.startStopBtn.classList.replace('btn-danger', 'btn-success');
-        systematic.analyzeDataBtn.disabled = true;
+    
         // Reset status
         systematic.deviceStatus.textContent = 'Status: Disconnected';
         systematic.deviceStatus.classList.remove('alert-success');
@@ -272,13 +562,14 @@ document.addEventListener('DOMContentLoaded', function () {
         Plotly.purge(systematic.forcePlotDiv); // Clear the plot
         Plotly.purge(systematic.histPlotDiv); // Clear the plot
         systematic.instabilityLossValue.textContent = '-';
-        systematic.effortLossValue.textContent = '-';
         systematic.stepInteractionArea.classList.add('d-none');
         systematic.stepList.innerHTML = '';
-        uploadedFile = null;
         trialState.metrics = null;
         trialState.steps = [];
         trialState.rawData = null;
+        trialDataBuffer = []; // Clear the data buffer
+        // Hide discard buttons
+        systematic.discardTrialBtn.style.display = 'none';
     }
 
     // --- Step Editing & Recalculation ---
@@ -287,25 +578,27 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!trialState.rawData || trialState.steps.length < 2) {
             // Not enough data to calculate, clear dependent views
             systematic.instabilityLossValue.textContent = 'N/A';
-            systematic.effortLossValue.textContent = 'N/A';
             Plotly.purge(systematic.histPlotDiv);
             return;
         }
 
         const steps = trialState.steps.sort((a, b) => a - b);
-        const df = trialState.rawData;
 
         // 1. Recalculate Metrics
         const durations = steps.slice(1).map((step, i) => step - steps[i]);
         const meanDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
         const instability_loss = durations.map(d => Math.pow(d - meanDuration, 2)).reduce((a, b) => a + b, 0) / durations.length;
 
-        const effort_loss = instability_loss * 1500 + Math.random() * 5; // Same simulation
-        trialState.metrics = { instability_loss, effort_loss };
+        // Preserve other metrics, only update the ones that changed
+        if (!trialState.metrics) {
+            trialState.metrics = {};
+        }
+        trialState.metrics.instability_loss = instability_loss;
+        trialState.metrics.step_count = steps.length;
 
         // 2. Update Metric Displays
         systematic.instabilityLossValue.textContent = instability_loss.toFixed(4);
-        systematic.effortLossValue.textContent = effort_loss.toFixed(4);
+        // The metabolic cost display is not updated here as it's a server-side calculation
 
         // 3. Re-render Histogram
         Plotly.react(systematic.histPlotDiv, [{
@@ -336,9 +629,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         steps.forEach(stepTime => {
-            const index = findClosestIndex(df.timestamp, stepTime);
-            newStepX.push(df.timestamp[index]); // Use the actual timestamp from data for precision
-            newStepY.push(df.force[index]);
+            const index = findClosestIndex(trialState.rawData.timestamp, stepTime);
+            newStepX.push(trialState.rawData.timestamp[index]); // Use the actual timestamp from data for precision
+            newStepY.push(trialState.rawData.force[index]);
         });
 
         // Use Plotly.react for a more robust update.
@@ -431,29 +724,15 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    systematic.uploadDataBtn.addEventListener('click', () => {
-        systematic.fileUploadInput.click();
-    });
 
-    systematic.fileUploadInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        uploadedFile = file;
-        showNotification(`File "${file.name}" selected. Ready to analyze.`, 'info');
-
-        // Update UI for file upload path
-        systematic.connectDeviceBtn.disabled = true;
-        systematic.uploadDataBtn.disabled = true;
-        systematic.startStopBtn.disabled = true;
-        systematic.analyzeDataBtn.disabled = false;
-        systematic.deviceStatus.textContent = `File: ${file.name}`;
-        systematic.deviceStatus.classList.replace('alert-secondary', 'alert-info');
-    });
 
     function onDisconnected() {
         showNotification('Device disconnected.', 'warning');
-        resetTrialState();
+        // Don't reset trial state - keep the data that was collected
+        systematic.deviceStatus.textContent = 'Status: Disconnected';
+        systematic.deviceStatus.classList.replace('alert-success', 'alert-warning');
+        systematic.connectDeviceBtn.disabled = false;
+        systematic.startStopBtn.disabled = true;
     }
 
     async function startDataCollection() {
@@ -546,13 +825,86 @@ document.addEventListener('DOMContentLoaded', function () {
             stopStopwatch();
             await stopDataCollection();
             systematic.startStopBtn.disabled = true;
-            systematic.analyzeDataBtn.disabled = false;
+            
+            // Analyze raw data immediately
+            if (trialDataBuffer.length > 0) {
+                const participantId = parseInt(systematic.trialForm.querySelector('#systematic-participant-id').value);
+                const geometryId = parseInt(systematic.trialForm.querySelector('#systematic-geometry-id').value);
+                
+                try {
+                    // Analyze data on the backend
+                    const payload = {
+                        participantId,
+                        geometryId,
+                        trialData: trialDataBuffer,
+                    };
+                    const results = await apiRequest('/api/trials/analyze', 'POST', payload);
+
+                    showNotification(results.message, 'info');
+                    
+                    // --- Store server results in trialState ---
+                    trialState.metrics = results.metrics;
+
+                    trialState.steps = results.steps.sort((a, b) => a - b);
+                    trialState.rawData = results.processed_data;
+
+                    // --- Render Plots ---
+                    async function renderPlot(plotDiv, plotPath) {
+                        const plotResponse = await fetch(`${SERVER_URL}${plotPath}?t=${new Date().getTime()}`);
+                        if (!plotResponse.ok) throw new Error(`Failed to fetch plot: ${plotPath}`);
+                        const plotHtml = await plotResponse.text();
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = plotHtml;
+                        const plotlyGraphDiv = tempDiv.querySelector('.plotly-graph-div');
+                        if (plotlyGraphDiv) {
+                            const plotData = JSON.parse(plotlyGraphDiv.dataset.raw);
+                            Plotly.newPlot(plotDiv, plotData.data, plotData.layout, { responsive: true });
+                        } else {
+                            throw new Error("Could not find plot data in server response.");
+                        }
+                    }
+
+                    await renderPlot(systematic.forcePlotDiv, results.plots.timeseries);
+                    await renderPlot(systematic.histPlotDiv, results.plots.histogram);
+                    
+                    // Re-attach the plotly click listener now that the plot exists
+                    systematic.forcePlotDiv.on('plotly_click', (data) => {
+                        const point = data.points[0];
+                        if (point.curveNumber !== 0) { return; }
+                        const clickedTime = point.x;
+                        if (trialState.steps.includes(clickedTime)) return;
+                        trialState.steps.push(clickedTime);
+                        recalculateAndUpdate();
+                    });
+
+                    // --- Display Metrics and Step List ---
+                    systematic.instabilityLossValue.textContent = results.metrics.instability_loss?.toFixed(4) ?? 'N/A';
+                    renderStepList();
+
+                    // --- Show UI Elements ---
+                    systematic.stepInteractionArea.classList.remove('d-none');
+                    systematic.plotsArea.classList.remove('d-none');
+                    systematic.metricsAndSurveyArea.classList.remove('d-none');
+                    systematic.discardTrialBtn.style.display = 'inline-block';
+
+
+                } catch (error) {
+                    showNotification(`Analysis failed: ${error.message}`, 'danger');
+                }
+            } else {
+                showNotification('No data collected from device. Please discard this trial.', 'danger');
+                systematic.discardTrialBtn.style.display = 'inline-block';
+            }
         } else {
             // Starting the trial
-            await startDataCollection();
-            startStopwatch();
-            systematic.startStopBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Trial';
-            systematic.startStopBtn.classList.replace('btn-success', 'btn-danger');
+            if (bleCharacteristic) {
+                await startDataCollection();
+                startStopwatch(); // Start stopwatch when trial starts
+                systematic.startStopBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Trial';
+                systematic.startStopBtn.classList.replace('btn-success', 'btn-danger');
+            } else {
+                showNotification('Please connect to device first', 'warning');
+            }
         }
     });
 
@@ -582,181 +934,103 @@ document.addEventListener('DOMContentLoaded', function () {
             `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths}`;
     }
 
-    systematic.analyzeDataBtn.addEventListener('click', async () => {
-        const participantId = parseInt(systematic.trialForm.querySelector('#systematic-participant-id').value);
-        const geometryId = parseInt(systematic.trialForm.querySelector('#systematic-geometry-id').value);
-
-        try {
-            let results;
-            if (uploadedFile) {
-                // --- Handle File Upload ---
-                const formData = new FormData();
-                formData.append('file', uploadedFile);
-                formData.append('participantId', participantId);
-                formData.append('geometryId', geometryId);
-
-                // We cannot use the apiRequest helper for multipart/form-data
-                const response = await fetch(`${SERVER_URL}/api/trials/analyze`, {
-                    method: 'POST',
-                    body: formData,
-                });
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.error);
-                }
-                results = await response.json();
-
-            } else {
-                // --- Handle Live Data ---
-                const payload = {
-                    participantId,
-                    geometryId,
-                    trialData: trialDataBuffer,
-                };
-                results = await apiRequest('/api/trials/analyze', 'POST', payload);
-            }
-
-            showNotification(results.message, 'info');
-
-            // --- Render Plotly Charts ---
-            async function renderPlot(plotDiv, plotPath) {
-                const plotResponse = await fetch(`${SERVER_URL}${plotPath}?t=${new Date().getTime()}`);
-                if (!plotResponse.ok) throw new Error(`Failed to fetch plot: ${plotPath}`);
-                const plotHtml = await plotResponse.text();
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = plotHtml;
-                const plotlyGraphDiv = tempDiv.querySelector('.plotly-graph-div');
-                if (plotlyGraphDiv) {
-                    const plotData = JSON.parse(plotlyGraphDiv.dataset.raw);
-                    Plotly.newPlot(plotDiv, plotData.data, plotData.layout, { responsive: true });
-                } else {
-                    throw new Error("Could not find plot data in server response.");
-                }
-            }
-
-            // This part changes significantly
-
-            // 1. Store steps and raw data for editing
-            trialState.steps = results.steps.sort((a, b) => a - b);
-            const rawDataResponse = await fetch(`${SERVER_URL}${results.plots.timeseries}?t=${new Date().getTime()}`);
-            const rawDataHtml = await rawDataResponse.text();
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = rawDataHtml;
-            const plotDiv = tempDiv.querySelector('.plotly-graph-div');
-            const plotData = JSON.parse(plotDiv.dataset.raw);
-
-            trialState.rawData = {
-                timestamp: plotData.data[0].x,
-                force: plotData.data[0].y
-            }
-
-            // 2. Initial Plotting
-            await renderPlot(systematic.forcePlotDiv, results.plots.timeseries);
-
-            // Re-attach the plotly click listener now that the plot exists
-            systematic.forcePlotDiv.on('plotly_click', (data) => {
-                // Guard: Only add steps if the user clicks on the main force trace (curveNumber 0)
-                const point = data.points[0];
-                if (point.curveNumber !== 0) {
-                    return;
-                }
-                const clickedTime = point.x;
-                if (trialState.steps.includes(clickedTime)) return;
-                trialState.steps.push(clickedTime);
-                recalculateAndUpdate();
-            });
-
-            await renderPlot(systematic.histPlotDiv, results.plots.histogram);
-
-            // 3. Initial Metric Display
-            trialState.metrics = results.metrics;
-            systematic.instabilityLossValue.textContent = results.metrics.instability_loss.toFixed(4);
-            systematic.effortLossValue.textContent = results.metrics.effort_loss.toFixed(4);
-
-            // 4. Render the interactive step list
-            renderStepList();
-            systematic.stepInteractionArea.classList.remove('d-none');
-
-            systematic.plotsArea.classList.remove('d-none');
-            systematic.metricsAndSurveyArea.classList.remove('d-none');
-            systematic.analyzeDataBtn.disabled = true;
-
-        } catch (error) {
-            showNotification(`Analysis failed: ${error.message}`, 'danger');
-        }
-    });
-
-
-    systematic.saveParticipantBtn.addEventListener('click', async () => {
-        const userId = systematic.newParticipantForm.querySelector('#new-participant-id').value.trim();
-        if (!userId) {
-            showNotification('Participant ID is required.', 'danger');
-            return;
-        }
-
-        const payload = {
-            userId: userId,
-            userCharacteristics: {
-                age: parseInt(document.getElementById('char-age').value),
-                sex: document.getElementById('char-sex').value,
-                height: parseFloat(document.getElementById('char-height').value),
-                weight: parseFloat(document.getElementById('char-weight').value),
-                forearm_length: parseFloat(document.getElementById('char-forearm').value),
-                activity_level: document.getElementById('char-activity').value,
-                previous_crutch_experience: document.querySelector('input[name="crutch-experience"]:checked').value === 'true',
-            }
-        };
-
-        try {
-            const newParticipant = await apiRequest('/api/participants', 'POST', payload);
-            showNotification(`Participant "${newParticipant.user_id}" created successfully!`, 'success');
-
-            systematic.createParticipantModal.hide();
-            systematic.newParticipantForm.reset();
-
-            // Refresh participant list and select the new one
-            await loadInitialData();
-            systematic.participantSelect.value = newParticipant.id;
-            systematic.participantSelect.dispatchEvent(new Event('change'));
-
-        } catch (error) {
-            showNotification(`Error creating participant: ${error.message}`, 'danger');
-        }
-    });
-
     systematic.trialForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        // This form now handles saving the final results after analysis
+        const surveyResponses = {};
+        
+        // --- SUS Score Calculation ---
+        const susQuestions = systematic.trialForm.querySelectorAll('.sus-question');
+        let susScore = 0;
+        susQuestions.forEach((q, index) => {
+            const value = parseInt(q.value);
+            const isPositive = q.dataset.positive === 'true';
+            surveyResponses[`sus_q${index + 1}`] = value;
+            if (isPositive) { susScore += (value - 1); } 
+            else { susScore += (5 - value); }
+        });
+        surveyResponses['sus_score'] = (susScore / 24) * 100;
+
+        // --- NRS Score Calculation ---
+        const nrsScoreValue = parseInt(systematic.trialForm.querySelector('#nrs-score').value);
+        surveyResponses['nrs_score'] = nrsScoreValue;
+
+        // --- TLX Score Calculation ---
+        const tlxQuestions = systematic.trialForm.querySelectorAll('.tlx-question');
+        let tlxScore = 0;
+        tlxQuestions.forEach((q, index) => {
+            const value = parseInt(q.value);
+            surveyResponses[`tlx_q${index + 1}`] = value;
+            tlxScore += value;
+        });
+        surveyResponses['tlx_score'] = tlxScore;
+        
+        // Grab metrics directly from the UI display
+        const stepCountFromUI = parseInt(systematic.stepCount.textContent) || 0;
+        const instabilityLossFromUI = parseFloat(systematic.instabilityLossValue.textContent) || 0;
+        
         const payload = {
             participantId: parseInt(systematic.trialForm.querySelector('#systematic-participant-id').value),
             geometryId: parseInt(systematic.trialForm.querySelector('#systematic-geometry-id').value),
-            surveyResponses: {
-                effort: parseInt(document.getElementById('systematic-effort').value),
-                pain: parseInt(document.getElementById('systematic-pain').value),
-                stability: parseInt(document.getElementById('systematic-instability').value),
-            },
-            metrics: trialState.metrics // Attach the calculated metrics
+            surveyResponses: surveyResponses,
+            metrics: {
+                step_count: stepCountFromUI,
+                instability_loss: instabilityLossFromUI
+            }
         };
 
+
+
         try {
+            // Validate required fields
+            if (!payload.participantId || !payload.geometryId) {
+                throw new Error('Missing participant or geometry ID');
+            }
+            if (!payload.surveyResponses || !trialState.metrics) {
+                throw new Error('Missing survey responses or metrics');
+            }
+            
+            console.log('Saving trial with payload:', payload); // Debug
             const newTrial = await apiRequest('/api/trials/save', 'POST', payload);
-            showNotification('Systematic trial recorded successfully!', 'success');
+            console.log('Trial saved successfully:', newTrial); // Debug
+            showNotification('Trial completed successfully! You can now run another trial.', 'success');
 
             systematic.trialRunnerCol.classList.add('d-none'); // Hide trial runner
             systematic.trialForm.reset();
             resetTrialState(); // Fully reset the panel
 
-            // Refresh data
+            // Force a reload of all data from the server to ensure the UI is in sync
             await loadInitialData();
-            // Refresh the remaining geometries list
-            systematic.participantSelect.dispatchEvent(new Event('change'));
+            
+            // Refresh the trial management screen for the current participant
+            if (appState.currentParticipant) {
+                renderParticipantTrialsTable(appState.currentParticipant.id);
+                renderRemainingGeometries(appState.geometries);
+            }
 
         } catch (error) {
+            console.error('Error saving trial:', error); // Debug
             showNotification(`Error submitting trial: ${error.message}`, 'danger');
         }
     });
 
+    // --- Trial Runner Control Buttons ---
+    systematic.closeTrialRunnerBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to close the trial runner? Any unsaved data will be lost.')) {
+            systematic.trialRunnerCol.classList.add('d-none');
+            resetTrialState();
+        }
+    });
+
+    systematic.discardTrialBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to discard this trial? Any collected data will be lost.')) {
+            // Simply hide the trial runner and reset state - no need to delete from database
+            // since the trial was never saved in the first place
+            systematic.trialRunnerCol.classList.add('d-none');
+            resetTrialState();
+            showNotification('Trial discarded successfully', 'success');
+        }
+    });
 
     // --- BO Mode Logic ---
 

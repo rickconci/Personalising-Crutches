@@ -13,7 +13,7 @@
 <body>
     <header class="py-3 mb-4 shadow-sm">
         <div class="container d-flex justify-content-between align-items-center">
-            <h1 class="fs-4 m-0">Crutch Personalisation Framework</h1>
+            <h1 id="home-button" class="fs-4 m-0" style="cursor: pointer; user-select: none;">Crutch Personalisation Framework</h1>
         </div>
     </header>
 
@@ -24,14 +24,14 @@
                 <h2>Select Experiment Mode</h2>
                 <p class="lead text-muted">Choose a protocol to begin.</p>
                 <div class="d-flex justify-content-center gap-3 mt-4">
-                    <button id="select-systematic-mode" class="btn btn-primary btn-lg">Systematic Experiment</button>
+                    <button id="select-systematic-mode" class="btn btn-primary btn-lg">Grid Search</button>
                     <button id="select-bo-mode" class="btn btn-success btn-lg">Personalised Optimisation (BO)</button>
                 </div>
             </div>
         </div>
 
         <!-- ======================================================================================= -->
-        <!-- ==  SYSTEMATIC EXPERIMENT SCREEN                                                     == -->
+        <!-- ==  GRID SEARCH SCREEN                                                               == -->
         <!-- ======================================================================================= -->
         <div id="systematic-screen" class="container-fluid py-3 d-none">
 
@@ -41,7 +41,14 @@
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 id="trial-runner-title" class="mb-0">Run Trial: Control</h5>
-                            <!-- Maybe add a close button here later -->
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="discard-trial-btn" style="display: none;">
+                                    <i class="fas fa-trash"></i> Discard Trial
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="close-trial-runner-btn">
+                                    <i class="fas fa-times"></i> Close
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
                             <form id="systematic-trial-form">
@@ -53,9 +60,6 @@
                                     <div class="btn-group" role="group">
                                         <button type="button" class="btn btn-primary" id="connect-device-btn"><i
                                                 class="fas fa-bluetooth-b"></i> Connect</button>
-                                        <button type="button" class="btn btn-outline-secondary" id="upload-data-btn"><i
-                                                class="fas fa-upload"></i> Upload</button>
-                                        <input type="file" id="file-upload-input" class="d-none" accept=".csv,.parquet">
                                     </div>
                                     <div id="device-status" class="alert alert-secondary p-2 mb-0"
                                         style="min-width: 200px;">Status: Disconnected</div>
@@ -64,8 +68,6 @@
                                         <div id="stopwatch" class="fs-2 fw-bold text-monospace">00:00.0</div>
                                         <button type="button" class="btn btn-success btn-lg" id="start-stop-btn"
                                             disabled><i class="fas fa-play"></i> Start</button>
-                                        <button type="button" class="btn btn-info btn-lg" id="analyze-data-btn"
-                                            disabled><i class="fas fa-cogs"></i> Analyze</button>
                                     </div>
                                 </div>
 
@@ -76,6 +78,11 @@
                                             <div class="row">
                                                 <div class="col-12">
                                                     <div id="force-plot-div" class="plotly-chart-container mb-2"></div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-12">
+                                                    <div id="hist-plot-div" class="plotly-chart-container mb-2"></div>
                                                 </div>
                                             </div>
                                             <!-- Step Interaction Table -->
@@ -93,41 +100,132 @@
                                     </div>
                                     <div class="col-md-4">
                                         <div id="metrics-and-survey-area" class="d-none border-start ps-3">
-                                            <div id="hist-plot-div" class="plotly-chart-container mb-3"></div>
-
                                             <h6 class="text-center">Calculated Metrics</h6>
-                                            <div class="d-flex justify-content-between mb-2">
-                                                <strong>Instability Loss:</strong>
-                                                <span id="instability-loss-value">-</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between mb-3">
-                                                <strong>Effort Loss:</strong>
-                                                <span id="effort-loss-value">-</span>
+                                            <div class="row">
+                                                <div class="col-md-12">
+                                                    <div class="metric-box">
+                                                        <h6 class="text-muted">Instability Loss (Variance, s²)</h6>
+                                                        <p id="instability-loss-value" class="h4 mb-0">-</p>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <hr>
 
-                                            <h6 class="text-center">Post-Trial Survey</h6>
-                                            <div class="mb-3">
-                                                <label for="systematic-effort" class="form-label">Perceived Effort
-                                                    (1-10)</label>
-                                                <input type="range" class="form-range" min="1" max="10"
-                                                    id="systematic-effort" required>
+                                            <div id="survey-sections">
+                                                <!-- Section 1: Usability (Adapted SUS) -->
+                                                <div class="card mb-3">
+                                                    <div class="card-header">
+                                                        <h6 class="mb-0">Usability Survey (Adapted SUS)</h6>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p class="text-muted small">Scale: 1 (Strongly Disagree) to 5 (Strongly Agree)</p>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">1. I think that I would like to use the crutches frequently.</label>
+                                                            <select class="form-select form-select-sm sus-question" data-positive="true">
+                                                                <option value="1">1</option> <option value="2">2</option> <option value="3" selected>3</option> <option value="4">4</option> <option value="5">5</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">2. I thought the crutches were easy to use.</label>
+                                                            <select class="form-select form-select-sm sus-question" data-positive="true">
+                                                                <option value="1">1</option> <option value="2">2</option> <option value="3" selected>3</option> <option value="4">4</option> <option value="5">5</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">3. I think that I would need the support of a technical person to be able to use these crutches.</label>
+                                                            <select class="form-select form-select-sm sus-question" data-positive="false">
+                                                                <option value="1">1</option> <option value="2">2</option> <option value="3" selected>3</option> <option value="4">4</option> <option value="5">5</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">4. I would imagine that most people would learn to use these crutches very quickly.</label>
+                                                            <select class="form-select form-select-sm sus-question" data-positive="true">
+                                                                <option value="1">1</option> <option value="2">2</option> <option value="3" selected>3</option> <option value="4">4</option> <option value="5">5</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">5. I felt very confident using the crutches.</label>
+                                                            <select class="form-select form-select-sm sus-question" data-positive="true">
+                                                                <option value="1">1</option> <option value="2">2</option> <option value="3" selected>3</option> <option value="4">4</option> <option value="5">5</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label small">6. I needed to learn a lot of things before I could get going with these crutches.</label>
+                                                            <select class="form-select form-select-sm sus-question" data-positive="false">
+                                                                <option value="1">1</option> <option value="2">2</option> <option value="3" selected>3</option> <option value="4">4</option> <option value="5">5</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Section 2: Pain (NRS) -->
+                                                <div class="card mb-3">
+                                                    <div class="card-header">
+                                                        <h6 class="mb-0">Pain Scale (NRS)</h6>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p class="text-muted small">On a scale from 0 (No pain) to 10 (Worst possible pain), how would you rate your pain?</p>
+                                                        <select id="nrs-score" class="form-select">
+                                                            <option value="0">0 - No pain</option>
+                                                            <option value="1">1</option>
+                                                            <option value="2">2</option>
+                                                            <option value="3">3</option>
+                                                            <option value="4">4</option>
+                                                            <option value="5" selected>5 - Moderate pain</option>
+                                                            <option value="6">6</option>
+                                                            <option value="7">7</option>
+                                                            <option value="8">8</option>
+                                                            <option value="9">9</option>
+                                                            <option value="10">10 - Worst possible pain</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Section 3: Workload (NASA-TLX) -->
+                                                <div class="card">
+                                                    <div class="card-header">
+                                                        <h6 class="mb-0">Workload Survey (NASA-TLX)</h6>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p class="text-muted small">Scale: 0 (Very Low) to 20 (Very High)</p>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">Mental Demand: How mentally demanding was the task?</label>
+                                                            <select class="form-select form-select-sm tlx-question">
+                                                                <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">Physical Demand: How physically demanding was the task?</label>
+                                                            <select class="form-select form-select-sm tlx-question">
+                                                                <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">Performance: How successful were you in accomplishing what you were asked to do?</label>
+                                                            <select class="form-select form-select-sm tlx-question">
+                                                                <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+                                                            </select>
+                                                        </div>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">Effort: How hard did you have to work to accomplish your level of performance?</label>
+                                                            <select class="form-select form-select-sm tlx-question">
+                                                                <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label small">Frustration: How insecure, discouraged, irritated, stressed, and annoyed were you?</label>
+                                                            <select class="form-select form-select-sm tlx-question">
+                                                                <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="mb-3">
-                                                <label for="systematic-pain" class="form-label">Pain/Discomfort
-                                                    (1-10)</label>
-                                                <input type="range" class="form-range" min="1" max="10"
-                                                    id="systematic-pain" required>
+
+                                            <div class="mt-3">
+                                                <button type="submit" class="btn btn-primary w-100">Save Trial Results</button>
                                             </div>
-                                            <div class="mb-3">
-                                                <label for="systematic-instability" class="form-label">Instability
-                                                    (1-10)</label>
-                                                <input type="range" class="form-range" min="1" max="10"
-                                                    id="systematic-instability" required>
-                                            </div>
-                                            <button type="submit" class="btn btn-primary w-100">Save Trial
-                                                Results</button>
                                         </div>
                                     </div>
                                 </div>
@@ -139,179 +237,208 @@
 
             <!-- Participant Selection & Geometries -->
             <div class="row">
-                <div class="col-md-6 mb-3">
+                <!-- Wide participant selection section -->
+                <div class="col-12 mb-3">
                     <div class="card">
                         <div class="card-header">
                             <h5>1. Select Participant</h5>
                         </div>
                         <div class="card-body">
-                            <select id="participant-select" class="form-select mb-2">
-                                <option selected disabled>Choose...</option>
-                            </select>
-                            <button type="button" class="btn btn-outline-primary w-100" data-bs-toggle="modal"
-                                data-bs-target="#create-participant-modal">
-                                <i class="fas fa-user-plus"></i> Create New Participant
-                            </button>
-                        </div>
-
-                        <div class="card mt-3">
-                            <div class="card-header">
-                                <h5>2. Select Trial</h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <select id="participant-select" class="form-select mb-2">
+                                        <option selected disabled>Choose...</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <button type="button" class="btn btn-outline-primary w-100 mb-2" data-bs-toggle="modal"
+                                        data-bs-target="#create-participant-modal">
+                                        <i class="fas fa-user-plus"></i> Create New Participant
+                                    </button>
+                                </div>
+                                <div class="col-md-4">
+                                    <button type="button" class="btn btn-outline-danger w-100" id="delete-participant-btn" disabled>
+                                        <i class="fas fa-user-minus"></i> Delete Participant
+                                    </button>
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <ul class="list-group" id="remaining-geometries">
-                                    <li class="list-group-item text-center text-muted">Select a participant to see
-                                        remaining trials.</li>
-                                </ul>
+                        </div>
+                        <div class="card-footer d-none" id="participant-details-footer">
+                            <h6 class="mb-2 text-muted">Participant Details</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <tbody id="participant-details-table">
+                                        <!-- Details will be injected here -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="col-md-6 mb-3">
-                        <!-- This column can be used for other summary info later -->
                     </div>
                 </div>
 
-                <!-- All Trials Data Table -->
-                <div class="row">
-                    <div class="col-12">
+                <!-- Grid search tables -->
+                <div class="col-12 mb-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>2. Select Trial</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="grid-search-tables">
+                                <div class="text-center text-muted">Select a participant to see grid search trials.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trials and Survey Tables Side by Side -->
+            <div class="row">
+                <!-- Participant Trials Data Table -->
+                <div class="col-md-12 mb-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 id="participant-trials-title">Participant Trials</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped table-hover" id="participant-trials-table">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th>Trial #</th>
+                                            <th>Geometry</th>
+                                            <th>α</th>
+                                            <th>β</th>
+                                            <th>γ</th>
+                                            <th>Date</th>
+                                            <th>Time</th>
+                                            <th>Steps</th>
+                                            <th>Instability Loss</th>
+                                            <th>SUS Score (/100)</th>
+                                            <th>NRS Score (/10)</th>
+                                            <th>TLX Score (/100)</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Trial rows will be injected here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Survey Data Table is removed -->
+            </div>
+        </div>
+
+        <!-- ======================================================================================= -->
+        <!-- ==  BAYESIAN OPTIMIZATION SCREEN                                                     == -->
+        <!-- ======================================================================================= -->
+        <div id="bo-screen" class="d-none">
+            <h3>Personalised Optimisation Dashboard</h3>
+            <div id="bo-setup">
+                <div class="row justify-content-center">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h4 class="card-title">Select Participant for BO</h4>
+                                <div class="input-group">
+                                    <select class="form-select" id="bo-participant-select"></select>
+                                    <button class="btn btn-success" id="start-bo-btn">Start
+                                        Session</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="bo-dashboard" class="d-none mt-4">
+                <h5 id="bo-user-info" class="text-center text-muted mb-4"></h5>
+                <div class="row g-4">
+                    <div class="col-lg-5">
+                        <!-- BO Suggestion -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-success text-white">
+                                <h3 class="fs-6 m-0">Next Suggested Geometry</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="bo-suggestion-box" class="text-center"></div>
+                                <div class="mt-3 d-flex justify-content-center gap-2">
+                                    <button id="bo-accept-geometry" class="btn btn-primary">Accept &
+                                        Record
+                                        Trial</button>
+                                    <button id="bo-reject-geometry" class="btn btn-danger">Reject (Not
+                                        Implemented)</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- BO Trial Form -->
+                        <div id="bo-trial-card" class="card mb-4 d-none">
+                            <div class="card-header">
+                                <h3 class="fs-6 m-0">Record BO Trial Data</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="bo-trial-form">
+                                    <div class="mb-3">
+                                        <label class="form-label">Geometry</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">α</span><input type="number"
+                                                id="bo-alpha" class="form-control" readonly>
+                                            <span class="input-group-text">β</span><input type="number" id="bo-beta"
+                                                class="form-control" readonly>
+                                            <span class="input-group-text">γ</span><input type="number"
+                                                id="bo-gamma" class="form-control" readonly>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3"><label for="bo-file" class="form-label">Upload
+                                            Data
+                                            File</label><input class="form-control" type="file" id="bo-file"
+                                            required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Subjective Metrics (0=best,
+                                            6=worst)</label>
+                                        <div><label class="form-label small">Pain</label><input type="range"
+                                                class="form-range" id="bo-pain" min="0" max="6" value="3"></div>
+                                        <div><label class="form-label small">Effort</label><input type="range"
+                                                class="form-range" id="bo-effort" min="0" max="6" value="3"></div>
+                                        <div><label class="form-label small">Instability</label><input type="range"
+                                                class="form-range" id="bo-instability" min="0" max="6" value="3">
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100">Submit BO
+                                        Trial</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-7">
+                        <!-- BO History -->
                         <div class="card">
                             <div class="card-header">
-                                <h5>All Recorded Trials</h5>
+                                <h3 class="fs-6 m-0">BO Session History</h3>
                             </div>
-                            <div class="card-body">
-                                <div class="table-responsive" style="max-height: 400px;">
-                                    <table class="table table-striped table-hover" id="all-trials-table">
-                                        <thead class="table-light sticky-top">
-                                            <tr>
-                                                <th>Timestamp</th>
-                                                <th>Participant</th>
-                                                <th>Geometry</th>
-                                                <th>α</th>
-                                                <th>β</th>
-                                                <th>γ</th>
-                                                <th>Source</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <!-- Trial rows will be injected here -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-
-            <!-- ======================================================================================= -->
-            <!-- ==  BAYESIAN OPTIMIZATION SCREEN                                                     == -->
-            <!-- ======================================================================================= -->
-            <div id="bo-screen" class="d-none">
-                <h3>Personalised Optimisation Dashboard</h3>
-                <div id="bo-setup">
-                    <div class="row justify-content-center">
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h4 class="card-title">Select Participant for BO</h4>
-                                    <div class="input-group">
-                                        <select class="form-select" id="bo-participant-select"></select>
-                                        <button class="btn btn-success" id="start-bo-btn">Start
-                                            Session</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="bo-dashboard" class="d-none mt-4">
-                    <h5 id="bo-user-info" class="text-center text-muted mb-4"></h5>
-                    <div class="row g-4">
-                        <div class="col-lg-5">
-                            <!-- BO Suggestion -->
-                            <div class="card mb-4">
-                                <div class="card-header bg-success text-white">
-                                    <h3 class="fs-6 m-0">Next Suggested Geometry</h3>
-                                </div>
-                                <div class="card-body">
-                                    <div id="bo-suggestion-box" class="text-center"></div>
-                                    <div class="mt-3 d-flex justify-content-center gap-2">
-                                        <button id="bo-accept-geometry" class="btn btn-primary">Accept &
-                                            Record
-                                            Trial</button>
-                                        <button id="bo-reject-geometry" class="btn btn-danger">Reject (Not
-                                            Implemented)</button>
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- BO Trial Form -->
-                            <div id="bo-trial-card" class="card mb-4 d-none">
-                                <div class="card-header">
-                                    <h3 class="fs-6 m-0">Record BO Trial Data</h3>
-                                </div>
-                                <div class="card-body">
-                                    <form id="bo-trial-form">
-                                        <div class="mb-3">
-                                            <label class="form-label">Geometry</label>
-                                            <div class="input-group">
-                                                <span class="input-group-text">α</span><input type="number"
-                                                    id="bo-alpha" class="form-control" readonly>
-                                                <span class="input-group-text">β</span><input type="number" id="bo-beta"
-                                                    class="form-control" readonly>
-                                                <span class="input-group-text">γ</span><input type="number"
-                                                    id="bo-gamma" class="form-control" readonly>
-                                            </div>
-                                        </div>
-                                        <div class="mb-3"><label for="bo-file" class="form-label">Upload
-                                                Data
-                                                File</label><input class="form-control" type="file" id="bo-file"
-                                                required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Subjective Metrics (0=best,
-                                                6=worst)</label>
-                                            <div><label class="form-label small">Pain</label><input type="range"
-                                                    class="form-range" id="bo-pain" min="0" max="6" value="3"></div>
-                                            <div><label class="form-label small">Effort</label><input type="range"
-                                                    class="form-range" id="bo-effort" min="0" max="6" value="3"></div>
-                                            <div><label class="form-label small">Instability</label><input type="range"
-                                                    class="form-range" id="bo-instability" min="0" max="6" value="3">
-                                            </div>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary w-100">Submit BO
-                                            Trial</button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-lg-7">
-                            <!-- BO History -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <h3 class="fs-6 m-0">BO Session History</h3>
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-hover mb-0" id="bo-history-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Trial</th>
-                                                <th>α</th>
-                                                <th>β</th>
-                                                <th>γ</th>
-                                                <th>Loss</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0" id="bo-history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Trial</th>
+                                            <th>α</th>
+                                            <th>β</th>
+                                            <th>γ</th>
+                                            <th>Loss</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
     </main>
 
     <!-- Create Participant Modal -->
@@ -324,9 +451,11 @@
                 </div>
                 <div class="modal-body">
                     <form id="new-participant-form">
-                        <div class="mb-3">
-                            <label for="new-participant-id" class="form-label">Participant ID</label>
-                            <input type="text" id="new-participant-id" class="form-control" required>
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <label for="new-participant-name" class="form-label">Full Name</label>
+                                <input type="text" id="new-participant-name" class="form-control" required>
+                            </div>
                         </div>
                         <hr>
                         <div class="row g-3">

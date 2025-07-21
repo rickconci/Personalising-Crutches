@@ -249,8 +249,6 @@ def analyze_trial_data():
         # --- Calculate Metrics ---
         instability_loss = compute_cycle_variance(df, final_steps_time)
         debug_print(f"Calculated instability loss (cycle variance): {instability_loss:.4f}")
-        # Dummy metabolic cost for now
-        metabolic_cost = 3.2
 
         # --- Create Plots ---
         debug_print("Creating Time Series and Histogram plots.")
@@ -311,10 +309,10 @@ def analyze_trial_data():
             },
             'metrics': {
                 'instability_loss': instability_loss,
-                'metabolic_cost': metabolic_cost,
                 'step_count': len(final_steps_time)
             },
-            'steps': final_steps_time.tolist()
+            'steps': final_steps_time.tolist(),
+            'processed_data': df.to_dict('records') # Return the processed data
         }
         debug_print("--- Analysis successful. Sending response to frontend. ---")
         return jsonify(final_payload)
@@ -331,6 +329,7 @@ def save_trial_results():
     """Saves the final trial data including metrics and survey responses."""
     data = request.json
     try:
+
         new_trial = Trial(
             participant_id=data['participantId'],
             geometry_id=data['geometryId'],
@@ -340,6 +339,7 @@ def save_trial_results():
         )
         db.session.add(new_trial)
         db.session.commit()
+        db.session.refresh(new_trial) # Refresh the object to get the saved data
         return jsonify(trial_to_dict(new_trial)), 201
     except Exception as e:
         db.session.rollback()
