@@ -189,25 +189,25 @@
                                                     </div>
                                                     <div class="card-body">
                                                         <p class="text-muted small">Scale: 0 (Very Low) to 20 (Very High)</p>
-                                                        <div class="mb-3">
+                                            <div class="mb-3">
                                                             <label class="form-label small">Mental Demand: How mentally demanding was the task?</label>
                                                             <select class="form-select form-select-sm tlx-question">
                                                                 <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
                                                             </select>
-                                                        </div>
-                                                        <div class="mb-3">
+                                            </div>
+                                            <div class="mb-3">
                                                             <label class="form-label small">Physical Demand: How physically demanding was the task?</label>
                                                             <select class="form-select form-select-sm tlx-question">
                                                                 <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
                                                             </select>
-                                                        </div>
-                                                        <div class="mb-3">
+                                            </div>
+                                            <div class="mb-3">
                                                             <label class="form-label small">Performance: How successful were you in accomplishing what you were asked to do?</label>
                                                             <select class="form-select form-select-sm tlx-question">
                                                                 <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
                                                             </select>
-                                                        </div>
-                                                        <div class="mb-3">
+                                            </div>
+                                            <div class="mb-3">
                                                             <label class="form-label small">Effort: How hard did you have to work to accomplish your level of performance?</label>
                                                             <select class="form-select form-select-sm tlx-question">
                                                                 <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
@@ -285,6 +285,20 @@
                         <div class="card-body">
                             <div id="grid-search-tables">
                                 <div class="text-center text-muted">Select a participant to see grid search trials.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instability 3D Plot -->
+                <div class="col-12 mb-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Instability Landscape</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="instability-plot-3d" class="plotly-chart-container" style="height: 500px;">
+                                <div class="text-center text-muted pt-5">Select a participant with completed trials to view the 3D plot.</div>
                             </div>
                         </div>
                     </div>

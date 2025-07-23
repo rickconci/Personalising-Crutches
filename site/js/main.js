@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', function () {
         createParticipantModal: new bootstrap.Modal(document.getElementById('create-participant-modal')),
         deleteParticipantBtn: document.getElementById('delete-participant-btn'),
         gridSearchTables: document.getElementById('grid-search-tables'),
+        instabilityPlot3D: document.getElementById('instability-plot-3d'),
         participantTrialsTableBody: document.querySelector('#participant-trials-table tbody'),
         participantTrialsTitle: document.getElementById('participant-trials-title'),
         trialRunnerCol: document.getElementById('trial-runner-col'),
@@ -204,20 +205,26 @@ document.addEventListener('DOMContentLoaded', function () {
         
         if (!participantId) {
             systematic.gridSearchTables.innerHTML = `<div class="text-center text-muted">Select a participant to see grid search trials.</div>`;
+            systematic.instabilityPlot3D.innerHTML = `<div class="text-center text-muted pt-5">Select a participant to view the 3D plot.</div>`;
             renderParticipantTrialsTable(null);
             return;
         }
         
+        await refreshParticipantView(participantId);
+    });
+
+    async function refreshParticipantView(participantId) {
         try {
             const data = await apiRequest(`/api/participants/${participantId}`);
             appState.currentParticipant = data.participant;
-            displayParticipantDetails(data.participant); // Display details
+            displayParticipantDetails(data.participant);
             renderParticipantTrialsTable(participantId);
             renderRemainingGeometries(data.all_geometries);
+            renderInstabilityPlot(data.instability_plot_data);
         } catch (error) {
             showNotification(`Error fetching participant details: ${error.message}`, 'danger');
         }
-    });
+    }
 
     systematic.saveParticipantBtn.addEventListener('click', async () => {
         const name = systematic.newParticipantForm.querySelector('#new-participant-name').value.trim();
@@ -312,8 +319,16 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
         
-        const participant = appState.participants.find(p => p.id == participantId);
-        const participantTrials = appState.trials.filter(t => t.participant_id == participantId);
+        // Ensure participantId is a number for proper comparison
+        const numericParticipantId = parseInt(participantId);
+        const participant = appState.participants.find(p => p.id === numericParticipantId);
+        const participantTrials = appState.trials.filter(t => t.participant_id === numericParticipantId);
+        
+        if (!participant) {
+            systematic.participantTrialsTitle.textContent = 'Participant Trials';
+            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-muted">Participant not found.</td></tr>`;
+            return;
+        }
         
         systematic.participantTrialsTitle.textContent = `${participant.name}'s Trials`;
         
@@ -329,9 +344,19 @@ document.addEventListener('DOMContentLoaded', function () {
             if (aIsControl && !bIsControl) return -1;
             if (!aIsControl && bIsControl) return 1;
 
-            const aNum = parseInt(a.geometry_name.substring(1));
-            const bNum = parseInt(b.geometry_name.substring(1));
-            return aNum - bNum;
+            // Handle cases where geometry_name might be undefined
+            const aGeomName = a.geometry_name || '';
+            const bGeomName = b.geometry_name || '';
+            
+            // If both have G-numbers, sort by number
+            if (aGeomName.startsWith('G') && bGeomName.startsWith('G')) {
+                const aNum = parseInt(aGeomName.substring(1)) || 0;
+                const bNum = parseInt(bGeomName.substring(1)) || 0;
+                return aNum - bNum;
+            }
+            
+            // Fallback to alphabetical sorting
+            return aGeomName.localeCompare(bGeomName);
         });
         
         participantTrials.forEach((t, index) => {
@@ -341,9 +366,19 @@ document.addEventListener('DOMContentLoaded', function () {
             const today = new Date();
             const isToday = trialDate.toDateString() === today.toDateString();
             
+            // Calculate trial number: Control shows as "Control", others start from 1
+            let trialNumber;
+            if (t.geometry_name === 'Control') {
+                trialNumber = 'Control';
+            } else {
+                // Count non-control trials before this one to get the correct number
+                const nonControlTrialsBefore = participantTrials.slice(0, index).filter(trial => trial.geometry_name !== 'Control').length;
+                trialNumber = nonControlTrialsBefore + 1;
+            }
+            
             row.innerHTML = `
-                <td>${t.geometry_name === 'Control' ? 'Control' : index}</td>
-                <td>${t.geometry_name}</td>
+                <td>${trialNumber}</td>
+                <td>${t.geometry_name || 'Unknown'}</td>
                 <td>${t.alpha ?? '-'}°</td>
                 <td>${t.beta ?? '-'}°</td>
                 <td>${t.gamma ?? '-'}°</td>
@@ -369,20 +404,14 @@ document.addEventListener('DOMContentLoaded', function () {
             await apiRequest(`/api/trials/${trialId}`, 'DELETE');
             showNotification('Trial deleted successfully', 'success');
             
-            // Remove trial from appState
-            appState.trials = appState.trials.filter(t => t.id != trialId);
+            // Force a reload of all global data to ensure UI is in sync
+            await loadInitialData();
             
-            // Refresh the participant trials table, survey table, and grid
-            const participantId = systematic.participantSelect.value;
-            renderParticipantTrialsTable(participantId);
-            
-            // Re-render the grid to update button colors
+            // Refresh the entire view for the currently selected participant
             if (appState.currentParticipant) {
-                const remainingGeometries = appState.geometries.filter(g => 
-                    !appState.trials.some(t => t.participant_id === appState.currentParticipant.id && t.geometry_id === g.id)
-                );
-                renderRemainingGeometries(remainingGeometries);
+                await refreshParticipantView(appState.currentParticipant.id);
             }
+
         } catch (error) {
             showNotification(`Error deleting trial: ${error.message}`, 'danger');
         }
@@ -392,13 +421,18 @@ document.addEventListener('DOMContentLoaded', function () {
         const gridSearchTables = document.getElementById('grid-search-tables');
         gridSearchTables.innerHTML = '';
         
+        if (!appState.currentParticipant) {
+            gridSearchTables.innerHTML = `<div class="text-center text-muted">No participant selected.</div>`;
+            return;
+        }
+        
         if (allGeometries.length === 0) {
             gridSearchTables.innerHTML = `<div class="text-center text-muted">No geometries available!</div>`;
             return;
         }
 
         // Get completed trials for this participant
-        const completedTrials = appState.trials.filter(t => t.participant_id === appState.currentParticipant.id);
+        const completedTrials = appState.trials.filter(t => t.participant_id === appState.currentParticipant?.id);
         const completedGeometryIds = new Set(completedTrials.map(t => t.geometry_id));
 
         // Group geometries by gamma value
@@ -453,11 +487,11 @@ document.addEventListener('DOMContentLoaded', function () {
         // Dynamically create grid tables for each gamma value
         Object.keys(gammaGroups).sort((a, b) => parseInt(a) - parseInt(b)).forEach(gamma => {
             const groupGeometries = gammaGroups[gamma];
-
+            
             // Get unique, sorted alpha and beta values for this gamma group
             const alphaValues = [...new Set(groupGeometries.map(g => g.alpha))].sort((a, b) => a - b);
             const betaValues = [...new Set(groupGeometries.map(g => g.beta))].sort((a, b) => a - b);
-
+            
             const tableContainer = document.createElement('div');
             tableContainer.className = 'mb-4';
             tableContainer.innerHTML = `<h5 class="mb-3">Gamma (γ): ${gamma}°</h5>`;
@@ -570,102 +604,138 @@ document.addEventListener('DOMContentLoaded', function () {
         trialDataBuffer = []; // Clear the data buffer
         // Hide discard buttons
         systematic.discardTrialBtn.style.display = 'none';
+
+        // Detach any existing plot listeners to prevent memory leaks
+        if (systematic.forcePlotDiv.removeListener) {
+            systematic.forcePlotDiv.removeListener('plotly_click', onPlotClick);
+        }
     }
 
-    // --- Step Editing & Recalculation ---
+    // --- Step Editing & Recalculation (Backend Driven) ---
 
-    function recalculateAndUpdate() {
-        if (!trialState.rawData || trialState.steps.length < 2) {
-            // Not enough data to calculate, clear dependent views
-            systematic.instabilityLossValue.textContent = 'N/A';
-            Plotly.purge(systematic.histPlotDiv);
-            return;
-        }
-
-        const steps = trialState.steps.sort((a, b) => a - b);
-
-        // 1. Recalculate Metrics
-        const durations = steps.slice(1).map((step, i) => step - steps[i]);
-        const meanDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
-        const instability_loss = durations.map(d => Math.pow(d - meanDuration, 2)).reduce((a, b) => a + b, 0) / durations.length;
-
-        // Preserve other metrics, only update the ones that changed
-        if (!trialState.metrics) {
-            trialState.metrics = {};
-        }
-        trialState.metrics.instability_loss = instability_loss;
-        trialState.metrics.step_count = steps.length;
-
-        // 2. Update Metric Displays
-        systematic.instabilityLossValue.textContent = instability_loss.toFixed(4);
-        // The metabolic cost display is not updated here as it's a server-side calculation
-
-        // 3. Re-render Histogram
-        Plotly.react(systematic.histPlotDiv, [{
-            x: durations,
-            type: 'histogram',
-            nbinsx: 20,
-            name: 'Step Durations'
-        }], { title: "Step Duration Distribution", xaxis_title: "Duration (s)", yaxis_title: "Count" }, { responsive: true });
-
-        // 4. Re-render Step List
-        renderStepList();
-
-        // 5. Update markers on the main plot
-        const newStepX = [];
-        const newStepY = [];
-
-        function findClosestIndex(array, value) {
-            let bestIndex = 0;
-            let bestDiff = Infinity;
-            for (let i = 0; i < array.length; i++) {
-                const diff = Math.abs(array[i] - value);
-                if (diff < bestDiff) {
-                    bestDiff = diff;
-                    bestIndex = i;
+    async function handleAnalysisUpdate(results) {
+        try {
+            showNotification(results.message, 'info');
+    
+            // --- Store server results in trialState ---
+            trialState.metrics = results.metrics;
+            trialState.steps = results.steps.sort((a, b) => a - b);
+            // rawData is only sent on the first analysis, not on recalculation.
+            // So we only update it if it's in the response.
+            if (results.processed_data) {
+                trialState.rawData = results.processed_data;
+            }
+    
+            // --- Render Plots ---
+            async function renderPlot(plotDiv, plotPath) {
+                // Add a cache-busting query parameter
+                const plotResponse = await fetch(`${SERVER_URL}${plotPath}?t=${new Date().getTime()}`);
+                if (!plotResponse.ok) throw new Error(`Failed to fetch plot: ${plotPath}`);
+                const plotHtml = await plotResponse.text();
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = plotHtml;
+                const plotlyGraphDiv = tempDiv.querySelector('.plotly-graph-div');
+                if (plotlyGraphDiv) {
+                    const plotData = JSON.parse(plotlyGraphDiv.dataset.raw);
+                    Plotly.newPlot(plotDiv, plotData.data, plotData.layout, { responsive: true });
+                } else {
+                    plotDiv.innerHTML = plotHtml; // Fallback for simple HTML
                 }
             }
-            return bestIndex;
+    
+            await renderPlot(systematic.forcePlotDiv, results.plots.timeseries);
+            await renderPlot(systematic.histPlotDiv, results.plots.histogram);
+    
+            // Re-attach the plotly click listener now that the plot exists
+            // First, remove any old listener to avoid duplicates
+            if (systematic.forcePlotDiv.removeListener) {
+                systematic.forcePlotDiv.removeListener('plotly_click', onPlotClick);
+            }
+            systematic.forcePlotDiv.on('plotly_click', onPlotClick);
+    
+            // --- Display Metrics and Step List ---
+            systematic.instabilityLossValue.textContent = results.metrics.instability_loss?.toFixed(4) ?? 'N/A';
+            renderStepList();
+    
+            // --- Show UI Elements ---
+            systematic.stepInteractionArea.classList.remove('d-none');
+            systematic.plotsArea.classList.remove('d-none');
+            systematic.metricsAndSurveyArea.classList.remove('d-none');
+            systematic.discardTrialBtn.style.display = 'inline-block';
+    
+        } catch (error) {
+            showNotification(`Failed to update analysis view: ${error.message}`, 'danger');
+            console.error("Error in handleAnalysisUpdate:", error);
         }
-
-        steps.forEach(stepTime => {
-            const index = findClosestIndex(trialState.rawData.timestamp, stepTime);
-            newStepX.push(trialState.rawData.timestamp[index]); // Use the actual timestamp from data for precision
-            newStepY.push(trialState.rawData.force[index]);
-        });
-
-        // Use Plotly.react for a more robust update.
-        // Get a fresh copy of the plot's data traces, keeping the non-step traces.
-        const originalTraces = systematic.forcePlotDiv.data.slice(0, 3);
-
-        // Create a new trace object for the updated steps
-        const newStepTrace = {
-            type: 'scatter',
-            mode: 'markers',
-            name: 'Detected Steps',
-            x: newStepX,
-            y: newStepY,
-            marker: { symbol: 'x', color: 'red', size: 10 }
-        };
-
-        // Combine the original traces with the new step trace
-        const newData = [...originalTraces, newStepTrace];
-
-        // Use Plotly.newPlot to force a complete redraw, which is more robust
-        // than Plotly.react for this type of dynamic update.
-        Plotly.newPlot(systematic.forcePlotDiv, newData, systematic.forcePlotDiv.layout);
+    }
+    
+    function onPlotClick(data) {
+        const point = data.points[0];
+        // Check if the click is on the main force trace (usually trace 0)
+        if (point.curveNumber !== 0) {
+            return;
+        }
+    
+        const clickedTime = point.x;
+    
+        // Avoid duplicates (within a small tolerance, e.g., 100ms)
+        if (trialState.steps.some(step => Math.abs(step - clickedTime) < 0.1)) {
+            showNotification("A step already exists near this time.", "warning");
+            return;
+        }
+    
+        // Add new step and sort
+        trialState.steps.push(clickedTime);
+        trialState.steps.sort((a, b) => a - b);
+    
+        // Trigger backend recalculation
+        requestRecalculation();
+    }
+    
+    async function requestRecalculation() {
+        const participantId = parseInt(systematic.trialForm.querySelector('#systematic-participant-id').value);
+        const geometryId = parseInt(systematic.trialForm.querySelector('#systematic-geometry-id').value);
+    
+        if (!participantId || !geometryId) {
+            showNotification("Cannot recalculate without participant and geometry IDs.", 'danger');
+            return;
+        }
+    
+        // Show a loading overlay on plots
+        systematic.plotsArea.style.opacity = '0.5';
+    
+        try {
+            const payload = {
+                participantId,
+                geometryId,
+                steps: trialState.steps,
+            };
+            const results = await apiRequest('/api/trials/recalculate', 'POST', payload);
+            await handleAnalysisUpdate(results);
+        } catch (error) {
+            showNotification(`Recalculation failed: ${error.message}`, 'danger');
+        } finally {
+            systematic.plotsArea.style.opacity = '1';
+        }
     }
 
     function renderStepList() {
         systematic.stepList.innerHTML = '';
         systematic.stepCount.textContent = trialState.steps.length;
+        
         trialState.steps.forEach((stepTime, index) => {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${stepTime.toFixed(3)}s</td>
                 <td class="text-end">
-                    <button class="btn btn-sm btn-outline-info py-0 px-1 inspect-step-btn" data-time="${stepTime}"><i class="fas fa-search-plus"></i></button>
-                    <button class="btn btn-sm btn-outline-danger py-0 px-1 delete-step-btn" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-info py-0 px-1 inspect-step-btn" 
+                            data-time="${stepTime}" title="Inspect">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 delete-step-btn" 
+                            data-index="${index}" title="Delete">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
                 </td>
             `;
             systematic.stepList.appendChild(row);
@@ -679,11 +749,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (target.classList.contains('delete-step-btn')) {
             const index = parseInt(target.dataset.index, 10);
             trialState.steps.splice(index, 1);
-            recalculateAndUpdate();
+            requestRecalculation();
         }
 
         if (target.classList.contains('inspect-step-btn')) {
             const time = parseFloat(target.dataset.time);
+            // Zoom to ±1 second around the step
             Plotly.relayout(systematic.forcePlotDiv, {
                 'xaxis.range': [time - 1.0, time + 1.0]
             });
@@ -839,53 +910,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         trialData: trialDataBuffer,
                     };
                     const results = await apiRequest('/api/trials/analyze', 'POST', payload);
-
-                    showNotification(results.message, 'info');
                     
-                    // --- Store server results in trialState ---
-                    trialState.metrics = results.metrics;
-
-                    trialState.steps = results.steps.sort((a, b) => a - b);
-                    trialState.rawData = results.processed_data;
-
-                    // --- Render Plots ---
-                    async function renderPlot(plotDiv, plotPath) {
-                        const plotResponse = await fetch(`${SERVER_URL}${plotPath}?t=${new Date().getTime()}`);
-                        if (!plotResponse.ok) throw new Error(`Failed to fetch plot: ${plotPath}`);
-                        const plotHtml = await plotResponse.text();
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = plotHtml;
-                        const plotlyGraphDiv = tempDiv.querySelector('.plotly-graph-div');
-                        if (plotlyGraphDiv) {
-                            const plotData = JSON.parse(plotlyGraphDiv.dataset.raw);
-                            Plotly.newPlot(plotDiv, plotData.data, plotData.layout, { responsive: true });
-                        } else {
-                            throw new Error("Could not find plot data in server response.");
-                        }
-                    }
-
-                    await renderPlot(systematic.forcePlotDiv, results.plots.timeseries);
-                    await renderPlot(systematic.histPlotDiv, results.plots.histogram);
-                    
-                    // Re-attach the plotly click listener now that the plot exists
-                    systematic.forcePlotDiv.on('plotly_click', (data) => {
-                        const point = data.points[0];
-                        if (point.curveNumber !== 0) { return; }
-                        const clickedTime = point.x;
-                        if (trialState.steps.includes(clickedTime)) return;
-                        trialState.steps.push(clickedTime);
-                        recalculateAndUpdate();
-                    });
-
-                    // --- Display Metrics and Step List ---
-                    systematic.instabilityLossValue.textContent = results.metrics.instability_loss?.toFixed(4) ?? 'N/A';
-                    renderStepList();
-
-                    // --- Show UI Elements ---
-                    systematic.stepInteractionArea.classList.remove('d-none');
-                    systematic.plotsArea.classList.remove('d-none');
-                    systematic.metricsAndSurveyArea.classList.remove('d-none');
-                    systematic.discardTrialBtn.style.display = 'inline-block';
+                    // The new handler function takes care of all UI updates
+                    await handleAnalysisUpdate(results);
 
 
                 } catch (error) {
@@ -1004,8 +1031,7 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Refresh the trial management screen for the current participant
             if (appState.currentParticipant) {
-                renderParticipantTrialsTable(appState.currentParticipant.id);
-                renderRemainingGeometries(appState.geometries);
+                await refreshParticipantView(appState.currentParticipant.id);
             }
 
         } catch (error) {
@@ -1031,6 +1057,52 @@ document.addEventListener('DOMContentLoaded', function () {
             showNotification('Trial discarded successfully', 'success');
         }
     });
+
+    function renderInstabilityPlot(plotData) {
+        const plotDiv = systematic.instabilityPlot3D;
+    
+        if (!plotData || plotData.length < 1) {
+            plotDiv.innerHTML = `<div class="text-center text-muted pt-5">No completed trials with instability data for this participant.</div>`;
+            return;
+        }
+    
+        const trace = {
+            x: plotData.map(d => d.alpha),
+            y: plotData.map(d => d.beta),
+            z: plotData.map(d => d.gamma),
+            mode: 'markers',
+            type: 'scatter3d',
+            marker: {
+                color: plotData.map(d => d.instability_loss),
+                colorscale: 'Viridis',
+                colorbar: {
+                    title: 'Instability Loss'
+                },
+                size: 8,
+                // Use a different symbol for the 'Control' trial
+                symbol: plotData.map(d => d.geometry_name.includes('Control') ? 'cross' : 'diamond')
+            },
+            text: plotData.map(d => `Trial: ${d.geometry_name}<br>Loss: ${d.instability_loss.toFixed(4)}`),
+            hoverinfo: 'text'
+        };
+    
+        const layout = {
+            title: 'Instability Loss vs. Crutch Geometry',
+            scene: {
+                xaxis: { title: 'Alpha (α)', range: [70, 120] },
+                yaxis: { title: 'Beta (β)', range: [110, 150] },
+                zaxis: { title: 'Gamma (γ)', range: [-12, 12] }
+            },
+            margin: {
+                l: 0,
+                r: 0,
+                b: 0,
+                t: 40
+            }
+        };
+    
+        Plotly.newPlot(plotDiv, [trace], layout, { responsive: true });
+    }
 
     // --- BO Mode Logic ---
 

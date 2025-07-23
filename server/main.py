@@ -77,6 +77,92 @@ def trial_to_dict(t):
     }
 
 
+def _perform_analysis_and_plotting(df, final_steps_time, participant_id, geometry_id, plot_folder):
+    """
+    Helper function to perform analysis and generate plots based on a dataframe and step times.
+    This is extracted to be reusable for recalculation.
+    """
+    debug_print(f"Performing analysis for P:{participant_id}, G:{geometry_id} with {len(final_steps_time)} steps.")
+    
+    # Ensure steps are sorted, as adding steps on the frontend might not preserve order
+    final_steps_time = sorted(final_steps_time)
+    
+    # --- Calculate Metrics ---
+    instability_loss = compute_cycle_variance(df, final_steps_time)
+    debug_print(f"Calculated instability loss (cycle variance): {instability_loss:.4f}")
+
+    # Get the force values at the detected step times for plotting
+    # Create a temporary series for quick lookup
+    force_at_step_time = df.set_index('timestamp')['force'].reindex(final_steps_time, method='nearest')
+
+    # --- Create Plots ---
+    debug_print("Creating Time Series and Histogram plots.")
+    # Figure 1: Time Series Data
+    fig_ts = go.Figure()
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['force'], mode='lines', name='Force'))
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['acc_x_data'], mode='lines', name='Accel X', visible='legendonly'))
+    fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['acc_y_data'], mode='lines', name='Accel Y', visible='legendonly'))
+    fig_ts.add_trace(go.Scatter(
+        x=final_steps_time, y=force_at_step_time, mode='markers', 
+        name='Detected Steps', marker=dict(symbol='x', color='red', size=10)
+    ))
+    fig_ts.update_layout(title="Time Series Data", xaxis_title="Time (s)", yaxis_title="Signal Value")
+
+    # Figure 2: Step Duration Histogram with Mean and Std Dev
+    step_durations = np.diff(final_steps_time)
+    mean_duration = np.mean(step_durations) if len(step_durations) > 0 else 0
+    std_duration = np.std(step_durations) if len(step_durations) > 0 else 0
+    
+    fig_hist = go.Figure()
+    if len(step_durations) > 0:
+        fig_hist.add_trace(go.Histogram(x=step_durations, nbinsx=20, name='Step Durations'))
+        fig_hist.add_vline(x=mean_duration, line_dash="dash", line_color="red", 
+                        annotation_text=f"Mean: {mean_duration:.3f}s")
+        fig_hist.add_vrect(x0=mean_duration-std_duration, x1=mean_duration+std_duration,
+                        fillcolor="red", opacity=0.2, layer="below", line_width=0,
+                        annotation_text=f"±1σ: {std_duration:.3f}s")
+    
+    fig_hist.update_layout(
+        title=f"Step Duration Distribution (Mean: {mean_duration:.3f}s, Std: {std_duration:.3f}s)", 
+        xaxis_title="Duration (s)", 
+        yaxis_title="Count"
+    )
+
+    # --- Save Plots ---
+    # To avoid cache issues on the frontend, let's add a timestamp to the plot filenames
+    import time
+    timestamp_ms = int(time.time() * 1000)
+
+    def save_plot(fig, filename_suffix):
+        plot_filename = f'plot_{participant_id}_{geometry_id}_{filename_suffix}_{timestamp_ms}.html'
+        plot_save_path = os.path.join(plot_folder, plot_filename)
+        raw_plot_json = fig.to_json()
+        html_output = to_html(fig, full_html=False, include_plotlyjs=False)
+        html_output_with_data = html_output.replace('<div ', f'<div data-raw=\'{raw_plot_json}\' ', 1)
+        with open(plot_save_path, 'w') as f:
+            f.write(html_output_with_data)
+        debug_print(f"Saved plot to {plot_save_path}")
+        return f'/data/plots/{plot_filename}'
+
+    ts_plot_path = save_plot(fig_ts, 'timeseries')
+    hist_plot_path = save_plot(fig_hist, 'histogram')
+
+    final_payload = {
+        'message': f'Analysis complete. Recalculated with {len(final_steps_time)} steps.',
+        'plots': {
+            'timeseries': ts_plot_path,
+            'histogram': hist_plot_path
+        },
+        'metrics': {
+            'instability_loss': instability_loss,
+            'step_count': len(final_steps_time)
+        },
+        'steps': final_steps_time, # Already a list from JSON or tolist()
+        'processed_data': df.to_dict('records')
+    }
+    return final_payload
+
+
 # =================================================================================
 # === MODE 1: SYSTEMATIC EXPERIMENT API ===========================================
 # =================================================================================
@@ -120,10 +206,25 @@ def get_participant_details(participant_id):
     completed_trials = Trial.query.filter_by(participant_id=participant.id, source='systematic').all()
     completed_geometry_ids = {t.geometry_id for t in completed_trials}
 
+    # --- Prepare data for the 3D instability plot ---
+    instability_plot_data = []
+    for t in completed_trials:
+        if t.geometry and t.processed_features and 'instability_loss' in t.processed_features:
+            instability_plot_data.append({
+                'alpha': t.geometry.alpha,
+                'beta': t.geometry.beta,
+                'gamma': t.geometry.gamma,
+                'instability_loss': t.processed_features['instability_loss'],
+                'geometry_name': t.geometry.name,
+                'trial_id': t.id
+            })
+
+
     return jsonify({
         'participant': participant_to_dict(participant),
         'completed_trials_count': len(completed_geometry_ids),
         'all_geometries': [geometry_to_dict(g) for g in all_geometries],
+        'instability_plot_data': instability_plot_data
     })
 
 @app.route('/api/geometries', methods=['GET'])
@@ -178,41 +279,20 @@ def analyze_trial_data():
         debug_print("Request failed: Missing required fields in JSON payload.")
         return jsonify({'error': 'Missing required JSON data for analysis'}), 400
     
-    # --- DATA SHAPE CHECK 1: The data arrives from the frontend ---
-    if isinstance(trial_data, list) and len(trial_data) > 0:
-        debug_print(f"Received 'trialData' is a LIST with {len(trial_data)} items.")
-        debug_print(f"Shape of first item: {list(trial_data[0].keys())}")
-    elif isinstance(trial_data, dict):
-        debug_print(f"Received 'trialData' is a DICTIONARY. Keys: {list(trial_data.keys())}")
-        # This is where the bug was! This branch would have been taken on the second analysis call.
-    else:
-        debug_print(f"Received 'trialData' is of an unexpected type: {type(trial_data)}")
-
-
-    trial_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(participant_id), str(geometry_id))
-    os.makedirs(trial_dir, exist_ok=True)
-    raw_data_path = os.path.join(trial_dir, 'live_recorded_data.csv')
-    
-    # --- DATA TRANSFORMATION 1: From JSON list/dict to Pandas DataFrame ---
-    df = pd.DataFrame(trial_data)
-    debug_print("Converted JSON to DataFrame.")
-    debug_print(f"DataFrame shape: {df.shape}")
-    debug_print(f"DataFrame columns: {list(df.columns)}")
-    df['relative_time_ms'] = [i * 5 for i in range(len(df))] 
-    df.to_csv(raw_data_path, index=False)
-    
-    debug_print(f"Saved raw data to: {raw_data_path}")
-
-
-    # --- Run Analysis & Plotting ---
     try:
-        debug_print(f"Attempting to read back the CSV for analysis from {raw_data_path}")
-        if not os.path.exists(raw_data_path):
-            return jsonify({'error': f'CSV file not found at {raw_data_path}'}), 400
-            
-        df = pd.read_csv(raw_data_path)
-        debug_print(f"Successfully read CSV. Shape: {df.shape}")
+        trial_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(participant_id), str(geometry_id))
+        os.makedirs(trial_dir, exist_ok=True)
+        raw_data_path = os.path.join(trial_dir, 'live_recorded_data.csv')
         
+        # --- DATA TRANSFORMATION 1: From JSON list/dict to Pandas DataFrame ---
+        df = pd.DataFrame(trial_data)
+        debug_print("Converted JSON to DataFrame.")
+        debug_print(f"DataFrame shape: {df.shape}")
+        df['relative_time_ms'] = [i * 5 for i in range(len(df))] 
+        df.to_csv(raw_data_path, index=False)
+        debug_print(f"Saved raw data to: {raw_data_path}")
+
+        # --- Run Analysis & Plotting ---
         # --- DATA TRANSFORMATION 2: Standardizing column names ---
         df.rename(columns={
             "relative_time_ms": "timestamp",
@@ -220,7 +300,6 @@ def analyze_trial_data():
             "accY": "acc_y_data"
         }, inplace=True, errors='ignore')
         debug_print(f"Renamed columns. Current columns: {list(df.columns)}")
-
 
         required_cols = ['timestamp', 'force', 'acc_x_data', 'acc_y_data']
         missing_cols = [col for col in required_cols if col not in df.columns]
@@ -242,78 +321,8 @@ def analyze_trial_data():
         final_steps_time = _postprocess_steps(raw_steps_time)
         debug_print(f"Detected {len(final_steps_time)} steps after post-processing.")
         
-        # Get the force values at the detected step times for plotting
-        # Create a temporary series for quick lookup
-        force_at_step_time = df.set_index('timestamp')['force'].reindex(final_steps_time, method='nearest')
-
-        # --- Calculate Metrics ---
-        instability_loss = compute_cycle_variance(df, final_steps_time)
-        debug_print(f"Calculated instability loss (cycle variance): {instability_loss:.4f}")
-
-        # --- Create Plots ---
-        debug_print("Creating Time Series and Histogram plots.")
-        # Figure 1: Time Series Data
-        fig_ts = go.Figure()
-        fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['force'], mode='lines', name='Force'))
-        fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['acc_x_data'], mode='lines', name='Accel X', visible='legendonly'))
-        fig_ts.add_trace(go.Scatter(x=df['timestamp'], y=df['acc_y_data'], mode='lines', name='Accel Y', visible='legendonly'))
-        fig_ts.add_trace(go.Scatter(
-            x=final_steps_time, y=force_at_step_time, mode='markers', 
-            name='Detected Steps', marker=dict(symbol='x', color='red', size=10)
-        ))
-        fig_ts.update_layout(title="Time Series Data", xaxis_title="Time (s)", yaxis_title="Signal Value")
-
-        # Figure 2: Step Duration Histogram with Mean and Std Dev
-        step_durations = np.diff(final_steps_time)
-        mean_duration = np.mean(step_durations)
-        std_duration = np.std(step_durations)
+        final_payload = _perform_analysis_and_plotting(df, final_steps_time, participant_id, geometry_id, app.config['PLOTS_FOLDER'])
         
-        fig_hist = go.Figure()
-        fig_hist.add_trace(go.Histogram(x=step_durations, nbinsx=20, name='Step Durations'))
-        
-        # Add mean line
-        fig_hist.add_vline(x=mean_duration, line_dash="dash", line_color="red", 
-                          annotation_text=f"Mean: {mean_duration:.3f}s")
-        
-        # Add standard deviation range
-        fig_hist.add_vrect(x0=mean_duration-std_duration, x1=mean_duration+std_duration,
-                          fillcolor="red", opacity=0.2, layer="below", line_width=0,
-                          annotation_text=f"±1σ: {std_duration:.3f}s")
-        
-        fig_hist.update_layout(
-            title=f"Step Duration Distribution (Mean: {mean_duration:.3f}s, Std: {std_duration:.3f}s)", 
-            xaxis_title="Duration (s)", 
-            yaxis_title="Count"
-        )
-
-        # --- Save Plots ---
-        def save_plot(fig, filename_suffix):
-            plot_filename = f'plot_{participant_id}_{geometry_id}_{filename_suffix}.html'
-            plot_save_path = os.path.join(app.config['PLOTS_FOLDER'], plot_filename)
-            raw_plot_json = fig.to_json()
-            html_output = to_html(fig, full_html=False, include_plotlyjs=False)
-            html_output_with_data = html_output.replace('<div ', f'<div data-raw=\'{raw_plot_json}\' ', 1)
-            with open(plot_save_path, 'w') as f:
-                f.write(html_output_with_data)
-            debug_print(f"Saved plot to {plot_save_path}")
-            return f'/data/plots/{plot_filename}'
-
-        ts_plot_path = save_plot(fig_ts, 'timeseries')
-        hist_plot_path = save_plot(fig_hist, 'histogram')
-
-        final_payload = {
-            'message': f'Analysis complete. Detected {len(final_steps_time)} steps.',
-            'plots': {
-                'timeseries': ts_plot_path,
-                'histogram': hist_plot_path
-            },
-            'metrics': {
-                'instability_loss': instability_loss,
-                'step_count': len(final_steps_time)
-            },
-            'steps': final_steps_time.tolist(),
-            'processed_data': df.to_dict('records') # Return the processed data
-        }
         debug_print("--- Analysis successful. Sending response to frontend. ---")
         return jsonify(final_payload)
 
@@ -323,6 +332,68 @@ def analyze_trial_data():
         import traceback
         debug_print(f"Full traceback: {traceback.format_exc()}")
         return jsonify({'error': f'An error occurred during analysis: {str(e)}'}), 500
+
+
+@app.route('/api/trials/recalculate', methods=['POST'])
+def recalculate_trial_metrics():
+    """
+    Receives an updated list of step times and recalculates metrics and plots.
+    """
+    debug_print("--- /api/trials/recalculate endpoint hit ---")
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No JSON data received'}), 400
+        
+    participant_id = data.get('participantId')
+    geometry_id = data.get('geometryId')
+    final_steps_time = data.get('steps') # The frontend-modified list of step times
+    
+    debug_print(f"Recalculating for P:{participant_id}, G:{geometry_id} with {len(final_steps_time)} steps.")
+
+    if not all([participant_id is not None, geometry_id is not None, isinstance(final_steps_time, list)]):
+        return jsonify({'error': 'Missing required JSON data: participantId, geometryId, steps (as a list)'}), 400
+    
+    try:
+        # --- Load the original raw data ---
+        trial_dir = os.path.join(app.config['UPLOAD_FOLDER'], str(participant_id), str(geometry_id))
+        raw_data_path = os.path.join(trial_dir, 'live_recorded_data.csv')
+        
+        if not os.path.exists(raw_data_path):
+            return jsonify({'error': f'Could not find raw data file for this trial at {raw_data_path}'}), 404
+
+        df = pd.read_csv(raw_data_path)
+        
+        # --- Perform the same data prep as in the initial analysis ---
+        df.rename(columns={"accX": "acc_x_data", "accY": "acc_y_data"}, inplace=True, errors='ignore')
+        
+        # This column is added during the initial processing, so we need to recreate it if it doesn't exist.
+        if 'relative_time_ms' not in df.columns:
+            df['relative_time_ms'] = [i * 5 for i in range(len(df))] 
+
+        df.rename(columns={"relative_time_ms": "timestamp"}, inplace=True, errors='ignore')
+        
+        required_cols = ['timestamp', 'force', 'acc_x_data', 'acc_y_data']
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+             return jsonify({'error': f'Loaded CSV missing required columns: {missing_cols}. Available: {list(df.columns)}'}), 400
+        
+        if df['timestamp'].max() > 1000: # Heuristic for milliseconds
+             df['timestamp'] = (pd.to_numeric(df['timestamp'], errors='coerce') - df['timestamp'].iloc[0]) / 1000.0
+        df.dropna(subset=required_cols, inplace=True)
+
+        # --- CALL SHARED ANALYSIS/PLOTTING FUNCTION ---
+        # The `steps` are provided by the client, so we don't detect them again.
+        final_payload = _perform_analysis_and_plotting(df, final_steps_time, participant_id, geometry_id, app.config['PLOTS_FOLDER'])
+        
+        debug_print("--- Recalculation successful. Sending response to frontend. ---")
+        return jsonify(final_payload)
+        
+    except Exception as e:
+        debug_print(f"--- Recalculation CRASHED ---")
+        import traceback
+        debug_print(f"Error: {str(e)}\nFull traceback: {traceback.format_exc()}")
+        return jsonify({'error': f'An error occurred during recalculation: {str(e)}'}), 500
+
 
 @app.route('/api/trials/save', methods=['POST'])
 def save_trial_results():
