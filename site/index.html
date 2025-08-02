@@ -19,7 +19,7 @@
 
     <main class="container pb-4">
         <!-- Screen 1: Mode Selection -->
-        <div id="mode-selection-screen">
+        <div id="mode-selection-screen" class="screen">
             <div class="text-center">
                 <h2>Select Experiment Mode</h2>
                 <p class="lead text-muted">Choose a protocol to begin.</p>
@@ -33,7 +33,7 @@
         <!-- ======================================================================================= -->
         <!-- ==  GRID SEARCH SCREEN                                                               == -->
         <!-- ======================================================================================= -->
-        <div id="systematic-screen" class="container-fluid py-3 d-none">
+        <div id="systematic-screen" class="screen container-fluid py-3 d-none">
 
             <!-- Full-width Trial Runner Bar -->
             <div class="row mb-3">
@@ -261,6 +261,11 @@
                                         <i class="fas fa-user-minus"></i> Delete Participant
                                     </button>
                                 </div>
+                                <div class="col-md-4">
+                                    <button type="button" class="btn btn-outline-info w-100" id="download-data-btn" disabled>
+                                        <i class="fas fa-download"></i> Download All Data
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="card-footer d-none" id="participant-details-footer">
@@ -349,18 +354,26 @@
         <!-- ======================================================================================= -->
         <!-- ==  BAYESIAN OPTIMIZATION SCREEN                                                     == -->
         <!-- ======================================================================================= -->
-        <div id="bo-screen" class="d-none">
+        <div id="bo-screen" class="screen d-none">
             <h3>Personalised Optimisation Dashboard</h3>
             <div id="bo-setup">
                 <div class="row justify-content-center">
                     <div class="col-md-6">
-                        <div class="card">
+                        <div class="card" id="bo-setup-card">
                             <div class="card-body">
                                 <h4 class="card-title">Select Participant for BO</h4>
                                 <div class="input-group">
                                     <select class="form-select" id="bo-participant-select"></select>
                                     <button class="btn btn-success" id="start-bo-btn">Start
                                         Session</button>
+                                </div>
+                                <div class="mt-3 d-flex gap-2">
+                                    <button type="button" class="btn btn-outline-primary w-100" id="bo-create-participant-btn" data-bs-toggle="modal" data-bs-target="#create-participant-modal">
+                                        <i class="fas fa-user-plus"></i> Create New Participant
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger w-100" id="bo-delete-participant-btn" disabled>
+                                        <i class="fas fa-user-minus"></i> Delete Participant
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -370,7 +383,292 @@
 
             <div id="bo-dashboard" class="d-none mt-4">
                 <h5 id="bo-user-info" class="text-center text-muted mb-4"></h5>
-                <div class="row g-4">
+                <div id="bo-main-flow" class="row g-4 d-none">
+                    <!-- Objective Selection Card -->
+                    <div class="col-12 d-none" id="bo-objective-select-card">
+                        <div class="card mb-4">
+                            <div class="card-header bg-info text-white">
+                                <h3 class="fs-6 m-0">Select Optimization Objective</h3>
+                            </div>
+                            <div class="card-body d-flex flex-wrap gap-3">
+                                <button class="btn btn-outline-primary flex-fill bo-objective-btn" data-objective="pain">Pain Optimization</button>
+                                <button class="btn btn-outline-primary flex-fill bo-objective-btn" data-objective="effort">Effort Optimization</button>
+                                <button class="btn btn-outline-primary flex-fill bo-objective-btn" data-objective="instability">Instability Optimization</button>
+                                <button class="btn btn-outline-primary flex-fill bo-objective-btn" data-objective="multi" disabled>Multi-Objective Optimization</button>
+                                <button class="btn btn-secondary w-100 mt-3" id="bo-objective-back-btn">Back</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pain BO Restart/Continue Decision Card -->
+                    <div class="col-12 d-none" id="pain-bo-decision-card">
+                        <div class="card mb-4">
+                            <div class="card-header bg-warning text-dark">
+                                <h3 class="fs-6 m-0">Pain Optimization: Existing Data Found</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Existing NRS pain data found for this participant!</strong>
+                                    <div class="mt-2">
+                                        <span id="pain-existing-data-summary">Loading...</span>
+                                    </div>
+                                </div>
+                                
+                                <p>How would you like to proceed?</p>
+                                
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="card border-primary">
+                                            <div class="card-body text-center">
+                                                <h5 class="card-title text-primary">
+                                                    <i class="fas fa-play me-2"></i>Continue Optimization
+                                                </h5>
+                                                <p class="card-text">Load all previous NRS data (from Grid Search and Pain BO) into the optimization and suggest the next geometry based on all historical data.</p>
+                                                <button class="btn btn-primary" id="pain-continue-btn">Continue with Existing Data</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border-success">
+                                            <div class="card-body text-center">
+                                                <h5 class="card-title text-success">
+                                                    <i class="fas fa-redo me-2"></i>Restart Optimization
+                                                </h5>
+                                                <p class="card-text">Start fresh optimization from the beginning. Input your starting geometry manually and ignore all previous data.</p>
+                                                <button class="btn btn-success" id="pain-restart-btn">Start Fresh</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center mt-4">
+                                    <button class="btn btn-secondary" id="pain-decision-back-btn">Back to Objectives</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pain Optimization Screen -->
+                    <div class="col-12 d-none pain-optimization" id="pain-optimization-screen">
+                        <div class="row g-4">
+                            <!-- Current Geometry Card -->
+                            <div class="col-lg-6">
+                                <div class="card">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h3 class="fs-6 m-0">Current Geometry - Trial <span id="pain-trial-number">1</span></h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="geometry-display mb-3">
+                                            <div class="row text-center">
+                                                <div class="col">
+                                                    <div class="metric-card">
+                                                        <div class="metric-label">Alpha (α)</div>
+                                                        <div class="metric-value" id="pain-geometry-alpha">-</div>
+                                                        <div class="metric-unit">degrees</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col">
+                                                    <div class="metric-card">
+                                                        <div class="metric-label">Beta (β)</div>
+                                                        <div class="metric-value" id="pain-geometry-beta">-</div>
+                                                        <div class="metric-unit">degrees</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col">
+                                                    <div class="metric-card">
+                                                        <div class="metric-label">Gamma (γ)</div>
+                                                        <div class="metric-value" id="pain-geometry-gamma">-</div>
+                                                        <div class="metric-unit">degrees</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Geometry Actions -->
+                                        <div class="geometry-actions d-flex gap-2 justify-content-center mb-3" id="pain-geometry-actions" style="display: none;">
+                                            <button class="btn btn-test-geometry" id="pain-test-geometry-btn">Test This Geometry</button>
+                                            <button class="btn btn-suggest-alternative" id="pain-suggest-alternative-btn">Suggest Alternative</button>
+                                            <button class="btn btn-manual-loss" id="pain-manual-loss-btn">Assign Manual Loss</button>
+                                        </div>
+                                        
+                                        <!-- High Loss Option -->
+                                        <div class="form-check" style="display: none;">
+                                            <input class="form-check-input" type="checkbox" id="pain-high-loss-checkbox">
+                                            <label class="form-check-label" for="pain-high-loss-checkbox">
+                                                This geometry is not feasible/safe (assign high loss)
+                                            </label>
+                                        </div>
+                                        
+                                        <!-- Manual Loss Input -->
+                                        <div class="mt-3" id="pain-manual-loss-section" style="display: none;">
+                                            <label for="pain-manual-loss-input" class="form-label">
+                                                Manual Loss Value (11-20)
+                                            </label>
+                                            <input type="number" class="form-control" id="pain-manual-loss-input" 
+                                                   min="11" max="20" value="15" step="1">
+                                            <small class="text-muted">Higher values = worse performance</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- NRS Pain Survey Card -->
+                                <div class="card mt-3" id="pain-survey-card" style="display: none;">
+                                    <div class="card-header bg-danger text-white">
+                                        <h3 class="fs-6 m-0">Pain Assessment (NRS)</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted">After testing this geometry, rate your pain level:</p>
+                                        <div class="mb-3">
+                                            <label for="pain-nrs-score" class="form-label">
+                                                Pain Level (0 = No pain, 10 = Worst possible pain)
+                                            </label>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <span class="small text-success">0<br>No Pain</span>
+                                                <input type="range" class="form-range flex-grow-1" id="pain-nrs-score" 
+                                                       min="0" max="10" value="0" step="1">
+                                                <span class="small text-danger">10<br>Worst Pain</span>
+                                            </div>
+                                            <div class="text-center mt-2">
+                                                <strong>Current Score: <span id="pain-nrs-display">0</span></strong>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button class="btn btn-success" id="pain-submit-score-btn">Submit Pain Score</button>
+                                            <button class="btn btn-secondary" id="pain-cancel-test-btn">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- First Geometry Input Card -->
+                                <div class="card mt-3" id="pain-first-geometry-card" style="display: none;">
+                                    <div class="card-header bg-primary text-white">
+                                        <h3 class="fs-6 m-0">Enter First Geometry</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted">Please enter the first geometry to test:</p>
+                                        <div class="row">
+                                            <div class="col">
+                                                <label for="pain-first-alpha" class="form-label">Alpha (α)</label>
+                                                <input type="number" class="form-control" id="pain-first-alpha" 
+                                                       min="70" max="120" step="5" value="90">
+                                                <small class="text-muted">Range: 70-120° (steps of 5°)</small>
+                                            </div>
+                                            <div class="col">
+                                                <label for="pain-first-beta" class="form-label">Beta (β)</label>
+                                                <input type="number" class="form-control" id="pain-first-beta" 
+                                                       min="90" max="140" step="5" value="110">
+                                                <small class="text-muted">Range: 90-140° (steps of 5°)</small>
+                                            </div>
+                                            <div class="col">
+                                                <label for="pain-first-gamma" class="form-label">Gamma (γ)</label>
+                                                <input type="number" class="form-control" id="pain-first-gamma" 
+                                                       min="-12" max="12" step="3" value="0">
+                                                <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2 mt-3">
+                                            <button class="btn btn-primary" id="pain-set-first-geometry-btn">Set First Geometry</button>
+                                            <button class="btn btn-secondary" id="pain-cancel-first-geometry-btn">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Alternative Geometry Input Card -->
+                                <div class="card mt-3" id="pain-alternative-geometry-card" style="display: none;">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h3 class="fs-6 m-0">Enter Alternative Geometry</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted">Enter your preferred geometry:</p>
+                                        <div class="row">
+                                            <div class="col">
+                                                <label for="pain-alt-alpha" class="form-label">Alpha (α)</label>
+                                                <input type="number" class="form-control" id="pain-alt-alpha" 
+                                                       min="70" max="120" step="5" value="90">
+                                                <small class="text-muted">Range: 70-120° (steps of 5°)</small>
+                                            </div>
+                                            <div class="col">
+                                                <label for="pain-alt-beta" class="form-label">Beta (β)</label>
+                                                <input type="number" class="form-control" id="pain-alt-beta" 
+                                                       min="90" max="140" step="5" value="110">
+                                                <small class="text-muted">Range: 90-140° (steps of 5°)</small>
+                                            </div>
+                                            <div class="col">
+                                                <label for="pain-alt-gamma" class="form-label">Gamma (γ)</label>
+                                                <input type="number" class="form-control" id="pain-alt-gamma" 
+                                                       min="-12" max="12" step="3" value="0">
+                                                <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2 mt-3">
+                                            <button class="btn btn-warning" id="pain-set-alternative-geometry-btn">Use This Geometry</button>
+                                            <button class="btn btn-secondary" id="pain-cancel-alternative-geometry-btn">Cancel</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Trial History Card -->
+                            <div class="col-lg-6">
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h3 class="fs-6 m-0">Pain Optimization History</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="pain-history-table-container">
+                                            <table class="table table-sm history-table" id="pain-history-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Trial</th>
+                                                        <th>α</th>
+                                                        <th>β</th>
+                                                        <th>γ</th>
+                                                        <th>Pain Score</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="pain-history-tbody">
+                                                    <!-- Trial history will be populated here -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div id="pain-no-history" class="text-center text-muted">
+                                            No trials completed yet. Start by testing the first geometry!
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Optimization Progress -->
+                                <div class="card mt-3" id="pain-progress-card" style="display: none;">
+                                    <div class="card-header bg-success text-white">
+                                        <h3 class="fs-6 m-0">Optimization Progress</h3>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="progress-metrics">
+                                            <div class="progress-metric">
+                                                <div class="progress-metric-label">Best Pain Score</div>
+                                                <div class="progress-metric-value best" id="pain-best-score">-</div>
+                                            </div>
+                                            <div class="progress-metric">
+                                                <div class="progress-metric-label">Total Trials</div>
+                                                <div class="progress-metric-value" id="pain-total-trials">0</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Navigation -->
+                        <div class="row mt-4">
+                            <div class="col text-center">
+                                <button class="btn btn-secondary" id="pain-exit-btn">
+                                    <i class="fas fa-sign-out-alt me-2"></i>Exit Optimization
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="col-lg-5">
                         <!-- BO Suggestion -->
                         <div class="card mb-4">
@@ -451,9 +749,759 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Effort BO Decision Card -->
+                <div class="col-12 d-none" id="effort-bo-decision-card">
+                    <div class="card mb-4">
+                        <div class="card-header bg-warning text-dark">
+                            <h3 class="fs-6 m-0">Effort Optimization: Existing Data Found</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Existing NASA TLX effort data found for this participant!</strong>
+                                <div class="mt-2">
+                                    <span id="effort-existing-data-summary">Loading...</span>
+                                </div>
+                            </div>
+                            
+                            <p>How would you like to proceed?</p>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card border-primary">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title text-primary">
+                                                <i class="fas fa-play me-2"></i>Continue Optimization
+                                            </h5>
+                                            <p class="card-text">Load all previous NASA TLX data (from Grid Search and Effort BO) into the optimization and suggest the next geometry based on all historical data.</p>
+                                            <button class="btn btn-primary" id="effort-continue-btn">Continue with Existing Data</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card border-danger">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title text-danger">
+                                                <i class="fas fa-refresh me-2"></i>Restart Optimization
+                                            </h5>
+                                            <p class="card-text">Start fresh optimization by inputting the starting geometry. Previous effort data will be preserved but marked as inactive for this session.</p>
+                                            <button class="btn btn-danger" id="effort-restart-btn">Start Fresh</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center mt-3">
+                                <button class="btn btn-secondary" id="effort-decision-back-btn">
+                                    <i class="fas fa-arrow-left me-2"></i>Back to Objectives
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Effort Optimization Screen -->
+                <div class="screen d-none effort-optimization" id="effort-optimization-screen">
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <!-- Current Geometry Card -->
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h3 class="fs-6 m-0">Current Geometry</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="geometry-display mb-3">
+                                        <div class="row text-center">
+                                            <div class="col">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Alpha (α)</div>
+                                                    <div class="metric-value" id="effort-geometry-alpha">-</div>
+                                                    <div class="metric-unit">degrees</div>
+                                                </div>
+                                            </div>
+                                            <div class="col">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Beta (β)</div>
+                                                    <div class="metric-value" id="effort-geometry-beta">-</div>
+                                                    <div class="metric-unit">degrees</div>
+                                                </div>
+                                            </div>
+                                            <div class="col">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Gamma (γ)</div>
+                                                    <div class="metric-value" id="effort-geometry-gamma">-</div>
+                                                    <div class="metric-unit">degrees</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Geometry Actions (like Pain Optimization) -->
+                                    <div class="geometry-actions d-flex gap-2 justify-content-center mb-3" id="effort-geometry-actions" style="display: none;">
+                                        <button class="btn btn-test-geometry" id="effort-test-geometry-btn">Test This Geometry</button>
+                                        <button class="btn btn-suggest-alternative" id="effort-suggest-alternative-btn">Suggest Alternative</button>
+                                        <button class="btn btn-manual-loss" id="effort-manual-loss-btn">Assign Manual Loss</button>
+                                    </div>
+                                    
+                                    <!-- Manual Loss Input -->
+                                    <div class="mt-3" id="effort-manual-loss-section" style="display: none;">
+                                        <label for="effort-manual-loss-input" class="form-label">
+                                            Manual Loss Value (11-20)
+                                        </label>
+                                        <input type="number" class="form-control" id="effort-manual-loss-input" 
+                                               min="11" max="20" value="15" step="1">
+                                        <small class="text-muted">Higher values = worse performance</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- First Geometry Input Card -->
+                            <div class="card mt-3" id="effort-first-geometry-card" style="display: none;">
+                                <div class="card-header bg-primary text-white">
+                                    <h3 class="fs-6 m-0">Enter First Geometry</h3>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">Please enter the first geometry to test:</p>
+                                    <div class="row">
+                                        <div class="col">
+                                            <label for="effort-first-alpha" class="form-label">Alpha (α)</label>
+                                            <input type="number" class="form-control" id="effort-first-alpha" 
+                                                   min="70" max="120" step="5" value="90">
+                                            <small class="text-muted">Range: 70-120° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="effort-first-beta" class="form-label">Beta (β)</label>
+                                            <input type="number" class="form-control" id="effort-first-beta" 
+                                                   min="90" max="140" step="5" value="110">
+                                            <small class="text-muted">Range: 90-140° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="effort-first-gamma" class="form-label">Gamma (γ)</label>
+                                            <input type="number" class="form-control" id="effort-first-gamma" 
+                                                   min="-12" max="12" step="3" value="0">
+                                            <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <button class="btn btn-primary" id="effort-set-first-geometry-btn">Set First Geometry</button>
+                                        <button class="btn btn-secondary" id="effort-cancel-first-geometry-btn">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- NASA TLX Survey Card -->
+                            <div class="card mt-3" id="effort-survey-card" style="display: none;">
+                                <div class="card-header bg-success text-white">
+                                    <h3 class="fs-6 m-0">NASA TLX Effort Assessment</h3>
+                                </div>
+                                <div class="card-body">
+                                    <form id="effort-survey-form">
+                                        <div class="mb-3">
+                                            <label class="form-label">Mental Demand: How mentally demanding was the task?</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Very Low</span>
+                                                <span>Very High</span>
+                                            </div>
+                                            <input type="range" class="form-range" name="mental_demand" min="1" max="21" value="11" step="1">
+                                            <div class="text-center small">
+                                                <span class="effort-value">11</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Physical Demand: How physically demanding was the task?</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Very Low</span>
+                                                <span>Very High</span>
+                                            </div>
+                                            <input type="range" class="form-range" name="physical_demand" min="1" max="21" value="11" step="1">
+                                            <div class="text-center small">
+                                                <span class="effort-value">11</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Temporal Demand: How hurried or rushed was the pace of the task?</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Very Low</span>
+                                                <span>Very High</span>
+                                            </div>
+                                            <input type="range" class="form-range" name="temporal_demand" min="1" max="21" value="11" step="1">
+                                            <div class="text-center small">
+                                                <span class="effort-value">11</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Performance: How successful were you in accomplishing what you were asked to do?</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Perfect</span>
+                                                <span>Failure</span>
+                                            </div>
+                                            <input type="range" class="form-range" name="performance" min="1" max="21" value="11" step="1">
+                                            <div class="text-center small">
+                                                <span class="effort-value">11</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Effort: How hard did you have to work to accomplish your level of performance?</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Very Low</span>
+                                                <span>Very High</span>
+                                            </div>
+                                            <input type="range" class="form-range" name="effort" min="1" max="21" value="11" step="1">
+                                            <div class="text-center small">
+                                                <span class="effort-value">11</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label">Frustration: How insecure, discouraged, irritated, stressed, and annoyed were you?</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Very Low</span>
+                                                <span>Very High</span>
+                                            </div>
+                                            <input type="range" class="form-range" name="frustration" min="1" max="21" value="11" step="1">
+                                            <div class="text-center small">
+                                                <span class="effort-value">11</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-grid gap-2 mt-4">
+                                            <button type="submit" class="btn btn-success">
+                                                <i class="fas fa-save me-2"></i>Submit Effort Assessment
+                                            </button>
+                                            <button type="button" id="effort-survey-cancel-btn" class="btn btn-secondary">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <!-- Alternative Geometry Input Card -->
+                            <div class="card mt-3" id="effort-alternative-geometry-card" style="display: none;">
+                                <div class="card-header bg-warning text-dark">
+                                    <h3 class="fs-6 m-0">Enter Alternative Geometry</h3>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">Enter your preferred geometry:</p>
+                                    <div class="row">
+                                        <div class="col">
+                                            <label for="effort-alt-alpha" class="form-label">Alpha (α)</label>
+                                            <input type="number" class="form-control" id="effort-alt-alpha" 
+                                                   min="70" max="120" step="5" value="90">
+                                            <small class="text-muted">Range: 70-120° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="effort-alt-beta" class="form-label">Beta (β)</label>
+                                            <input type="number" class="form-control" id="effort-alt-beta" 
+                                                   min="90" max="140" step="5" value="110">
+                                            <small class="text-muted">Range: 90-140° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="effort-alt-gamma" class="form-label">Gamma (γ)</label>
+                                            <input type="number" class="form-control" id="effort-alt-gamma" 
+                                                   min="-12" max="12" step="3" value="0">
+                                            <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <button class="btn btn-warning" id="effort-set-alternative-geometry-btn">Use This Geometry</button>
+                                        <button class="btn btn-secondary" id="effort-cancel-alternative-geometry-btn">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Trial History Card -->
+                        <div class="col-lg-6">
+                            <div class="card">
+                                <div class="card-header bg-info text-white">
+                                    <h3 class="fs-6 m-0">Effort Optimization History</h3>
+                                </div>
+                                <div class="card-body">
+                                    <!-- Progress Summary -->
+                                    <div class="progress-metrics mb-3">
+                                        <div class="progress-metric">
+                                            <div class="progress-metric-label">Total Trials</div>
+                                            <div class="progress-metric-value" id="effort-total-trials">0</div>
+                                        </div>
+                                        <div class="progress-metric">
+                                            <div class="progress-metric-label">Best Effort Score</div>
+                                            <div class="progress-metric-value best" id="effort-best-score">-</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Trial History Table -->
+                                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                        <table class="table table-sm history-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Trial</th>
+                                                    <th>Geometry</th>
+                                                    <th>Effort Score</th>
+                                                    <th>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="effort-history-tbody">
+                                                <!-- Trial rows will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <!-- Action Buttons -->
+                                    <div class="d-grid gap-2 mt-3">
+                                        <button class="btn btn-primary" id="effort-suggest-next-btn">
+                                            <i class="fas fa-magic me-2"></i>Suggest Next Geometry
+                                        </button>
+                                        <button class="btn btn-secondary" id="effort-exit-btn">
+                                            <i class="fas fa-sign-out-alt me-2"></i>Exit Optimization
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Instability BO Decision Card -->
+                <div class="col-12 d-none" id="instability-bo-decision-card">
+                    <div class="card mb-4">
+                        <div class="card-header bg-warning text-dark">
+                            <h3 class="fs-6 m-0">Instability Optimization: Existing Data Found</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Existing instability data found for this participant!</strong>
+                                <div class="mt-2">
+                                    <span id="instability-existing-data-summary">Loading...</span>
+                                </div>
+                            </div>
+                            
+                            <p>How would you like to proceed?</p>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card border-primary">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title text-primary">
+                                                <i class="fas fa-play me-2"></i>Continue Optimization
+                                            </h5>
+                                            <p class="card-text">Load all previous instability data (from Grid Search and Instability BO) into the optimization and suggest the next geometry based on all historical data.</p>
+                                            <button class="btn btn-primary" id="instability-continue-btn">Continue with Existing Data</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card border-success">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title text-success">
+                                                <i class="fas fa-redo me-2"></i>Restart Optimization
+                                            </h5>
+                                            <p class="card-text">Start fresh optimization from the beginning. Input your starting geometry manually and ignore all previous data.</p>
+                                            <button class="btn btn-success" id="instability-restart-btn">Start Fresh</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="text-center mt-4">
+                                <button class="btn btn-secondary" id="instability-decision-back-btn">Back to Objectives</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instability Optimization Screen -->
+                <div class="col-12 d-none instability-optimization" id="instability-optimization-screen">
+                    <div class="row g-4">
+                        <!-- Current Geometry and Data Collection Card -->
+                        <div class="col-lg-6">
+                            <div class="card">
+                                <div class="card-header bg-danger text-white">
+                                    <h3 class="fs-6 m-0">Instability Optimization - Trial <span id="instability-trial-number">1</span></h3>
+                                </div>
+                                <div class="card-body">
+                                    <!-- Current Geometry Display -->
+                                    <div class="geometry-display mb-3" id="instability-current-geometry">
+                                        <div class="row text-center">
+                                            <div class="col">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Alpha (α)</div>
+                                                    <div class="metric-value" id="instability-geometry-alpha">-</div>
+                                                    <div class="metric-unit">degrees</div>
+                                                </div>
+                                            </div>
+                                            <div class="col">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Beta (β)</div>
+                                                    <div class="metric-value" id="instability-geometry-beta">-</div>
+                                                    <div class="metric-unit">degrees</div>
+                                                </div>
+                                            </div>
+                                            <div class="col">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Gamma (γ)</div>
+                                                    <div class="metric-value" id="instability-geometry-gamma">-</div>
+                                                    <div class="metric-unit">degrees</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- IMU Connection Status -->
+                                    <div class="connection-status alert alert-info mb-3" id="instability-connection-status">
+                                        <i class="fas fa-bluetooth-b me-2"></i>
+                                        <span id="instability-connection-text">Click "Connect IMU" to begin</span>
+                                    </div>
+                                    
+                                    <!-- Geometry Actions (shown immediately like Pain/Effort) -->
+                                    <div class="geometry-actions d-flex gap-2 justify-content-center mb-3" id="instability-geometry-actions" style="display: none;">
+                                        <button class="btn btn-test-geometry" id="instability-test-geometry-btn">Test This Geometry</button>
+                                        <button class="btn btn-suggest-alternative" id="instability-suggest-alternative-btn">Suggest Alternative</button>
+                                        <button class="btn btn-manual-loss" id="instability-manual-loss-btn">Assign Manual Loss</button>
+                                    </div>
+                                    
+                                    <!-- Manual Loss Input -->
+                                    <div class="mt-3" id="instability-manual-loss-section" style="display: none;">
+                                        <label for="instability-manual-loss-input" class="form-label">
+                                            Manual Loss Value (11-20)
+                                        </label>
+                                        <input type="number" class="form-control" id="instability-manual-loss-input" 
+                                               min="11" max="20" value="15" step="1">
+                                        <small class="text-muted">Higher values = worse performance</small>
+                                    </div>
+                                    
+                                    <!-- Control Buttons with Timer (same as Grid Search) -->
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <button id="instability-connect-btn" class="btn btn-primary">
+                                            <i class="fas fa-bluetooth-b me-2"></i>Connect IMU
+                                        </button>
+                                        
+                                        <div class="ms-auto d-flex align-items-center gap-3">
+                                            <div id="instability-stopwatch" class="stopwatch-display">00:00.0</div>
+                                            <button id="instability-start-stop-btn" class="btn btn-success btn-lg" disabled>
+                                                <i class="fas fa-play"></i> Start
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Analysis Results & Plots (similar to Grid Search) -->
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="instability-plots-area" class="d-none">
+                                                <div class="row">
+                                                    <div class="col-12">
+                                                        <div id="instability-force-plot-div" class="plotly-chart-container mb-2"></div>
+                                                    </div>
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-12">
+                                                        <div id="instability-hist-plot-div" class="plotly-chart-container mb-2"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Analysis Results Card -->
+                            <div class="card mt-3 d-none" id="instability-results-card">
+                                <div class="card-header bg-success text-white">
+                                    <h3 class="fs-6 m-0">Analysis Results</h3>
+                                </div>
+                                <div class="card-body">
+                                    <!-- Analysis Plots -->
+                                    <div id="instability-plots-area" class="mb-3">
+                                        <!-- Plots will be dynamically inserted here -->
+                                    </div>
+                                    
+                                    <!-- Metrics Display -->
+                                    <div class="row text-center mb-3">
+                                        <div class="col-6">
+                                            <div class="border rounded p-2">
+                                                <div class="text-muted small">Instability Loss</div>
+                                                <div class="h5 mb-0" id="instability-loss-display">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="border rounded p-2">
+                                                <div class="text-muted small">Steps Detected</div>
+                                                <div class="h5 mb-0" id="instability-steps-count">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Step Editing -->
+                                    <div class="mb-3">
+                                        <label class="form-label small">Edit Steps (click on plot to add/remove)</label>
+                                        <div id="instability-steps-list" class="border rounded p-2" style="max-height: 150px; overflow-y: auto;">
+                                            <!-- Step list will be populated here -->
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Action Buttons -->
+                                    <div class="d-grid gap-2">
+                                        <button id="instability-show-survey-btn" class="btn btn-primary">
+                                            <i class="fas fa-clipboard-list me-2"></i>Complete SUS Survey
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- SUS Survey and History -->
+                        <div class="col-lg-6">
+                            <!-- SUS Survey Card -->
+                            <div class="card d-none" id="instability-survey-card">
+                                <div class="card-header bg-primary text-white">
+                                    <h3 class="fs-6 m-0">System Usability Scale (SUS) Survey</h3>
+                                </div>
+                                <div class="card-body">
+                                    <form id="instability-survey-form">
+                                        <p class="text-muted small mb-3">Please rate your agreement with each statement about this crutch configuration:</p>
+                                        
+                                        <!-- SUS Questions (adapted for crutch usability) -->
+                                        <div class="mb-3">
+                                            <label class="form-label small">1. I think that I would like to use this crutch configuration frequently</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Strongly Disagree</span>
+                                                <span>Strongly Agree</span>
+                                            </div>
+                                            <input type="range" class="form-range sus-question" name="sus1" min="1" max="5" value="3" data-question="1">
+                                            <div class="text-center small">
+                                                <span class="sus-value">3</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label small">2. I found this crutch configuration unnecessarily complex</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Strongly Disagree</span>
+                                                <span>Strongly Agree</span>
+                                            </div>
+                                            <input type="range" class="form-range sus-question" name="sus2" min="1" max="5" value="3" data-question="2">
+                                            <div class="text-center small">
+                                                <span class="sus-value">3</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label small">3. I thought this crutch configuration was easy to use</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Strongly Disagree</span>
+                                                <span>Strongly Agree</span>
+                                            </div>
+                                            <input type="range" class="form-range sus-question" name="sus3" min="1" max="5" value="3" data-question="3">
+                                            <div class="text-center small">
+                                                <span class="sus-value">3</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label small">4. I think that I would need technical support to be able to use this crutch</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Strongly Disagree</span>
+                                                <span>Strongly Agree</span>
+                                            </div>
+                                            <input type="range" class="form-range sus-question" name="sus4" min="1" max="5" value="3" data-question="4">
+                                            <div class="text-center small">
+                                                <span class="sus-value">3</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label class="form-label small">5. I found the various functions in this crutch were well integrated</label>
+                                            <div class="d-flex justify-content-between small text-muted">
+                                                <span>Strongly Disagree</span>
+                                                <span>Strongly Agree</span>
+                                            </div>
+                                            <input type="range" class="form-range sus-question" name="sus5" min="1" max="5" value="3" data-question="5">
+                                            <div class="text-center small">
+                                                <span class="sus-value">3</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-grid gap-2 mt-4">
+                                            <button type="submit" class="btn btn-success">
+                                                <i class="fas fa-save me-2"></i>Save Trial Results
+                                            </button>
+                                            <button type="button" id="instability-survey-cancel-btn" class="btn btn-secondary">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                            
+                            <!-- Alternative Geometry Input Card -->
+                            <div class="card mt-3" id="instability-alternative-geometry-card" style="display: none;">
+                                <div class="card-header bg-warning text-dark">
+                                    <h3 class="fs-6 m-0">Enter Alternative Geometry</h3>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">Enter your preferred geometry:</p>
+                                    <div class="row">
+                                        <div class="col">
+                                            <label for="instability-alt-alpha" class="form-label">Alpha (α)</label>
+                                            <input type="number" class="form-control" id="instability-alt-alpha" 
+                                                   min="70" max="120" step="5" value="90">
+                                            <small class="text-muted">Range: 70-120° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="instability-alt-beta" class="form-label">Beta (β)</label>
+                                            <input type="number" class="form-control" id="instability-alt-beta" 
+                                                   min="90" max="140" step="5" value="110">
+                                            <small class="text-muted">Range: 90-140° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="instability-alt-gamma" class="form-label">Gamma (γ)</label>
+                                            <input type="number" class="form-control" id="instability-alt-gamma" 
+                                                   min="-12" max="12" step="3" value="0">
+                                            <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <button class="btn btn-warning" id="instability-set-alternative-geometry-btn">Use This Geometry</button>
+                                        <button class="btn btn-secondary" id="instability-cancel-alternative-geometry-btn">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                                                        
+                            <!-- Trial History Card -->
+                            <div class="card">
+                                <div class="card-header bg-danger text-white">
+                                    <h3 class="fs-6 m-0">Instability Optimization History</h3>
+                                </div>
+                                <div class="card-body p-2">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm history-table mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>α</th>
+                                                    <th>β</th>
+                                                    <th>γ</th>
+                                                    <th>Loss</th>
+                                                    <th>SUS</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="instability-history-tbody">
+                                                <!-- History will be populated here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Progress Summary -->
+                            <div class="card mt-3">
+                                <div class="card-header bg-info text-white">
+                                    <h3 class="fs-6 m-0">Optimization Progress</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="progress-metrics">
+                                        <div class="progress-metric">
+                                            <div class="progress-metric-label">Best Loss</div>
+                                            <div class="progress-metric-value best" id="instability-best-loss">-</div>
+                                        </div>
+                                        <div class="progress-metric">
+                                            <div class="progress-metric-label">Total Trials</div>
+                                            <div class="progress-metric-value" id="instability-total-trials">0</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-3 d-grid gap-2">
+                                        <button id="instability-suggest-next-btn" class="btn btn-warning d-none">
+                                            <i class="fas fa-lightbulb me-2"></i>Suggest Next Geometry
+                                        </button>
+                                        <button id="instability-exit-btn" class="btn btn-secondary">
+                                            <i class="fas fa-sign-out-alt me-2"></i>Exit Optimization
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
+
+    <!-- Edit Trial Modal -->
+    <div class="modal fade" id="edit-trial-modal" tabindex="-1" aria-labelledby="editTrialModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editTrialModalLabel">Edit Trial</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-trial-form">
+                        <input type="hidden" id="edit-trial-id">
+                        <input type="hidden" id="edit-participant-id">
+                        <input type="hidden" id="edit-geometry-id">
+
+                        <!-- Content copied and adapted from trial-runner-col -->
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div id="edit-plots-area">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="edit-force-plot-div" class="plotly-chart-container mb-2"></div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div id="edit-hist-plot-div" class="plotly-chart-container mb-2"></div>
+                                        </div>
+                                    </div>
+                                    <div id="edit-step-interaction-area">
+                                        <h6>Detected Steps (<span id="edit-step-count">0</span>)</h6>
+                                        <div class="table-responsive" style="max-height: 200px;">
+                                            <table class="table table-sm table-striped">
+                                                <tbody id="edit-step-list">
+                                                    <!-- Step items will be injected here -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div id="edit-metrics-and-survey-area" class="border-start ps-3">
+                                    <h6 class="text-center">Calculated Metrics</h6>
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div class="metric-box">
+                                                <h6 class="text-muted">Instability Loss (Variance, s²)</h6>
+                                                <p id="edit-instability-loss-value" class="h4 mb-0">-</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <hr>
+                                    <!-- The survey section can be a simplified version or re-used -->
+                                    <div id="edit-survey-area">
+                                        <!-- Survey questions can be dynamically loaded or assumed to be static -->
+                                    </div>
+                                    <div class="mt-3 d-grid gap-2">
+                                        <button type="button" id="resave-trial-btn" class="btn btn-primary">Resave Changes</button>
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Create Participant Modal -->
     <div class="modal fade" id="create-participant-modal" tabindex="-1">

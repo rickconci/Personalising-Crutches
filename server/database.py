@@ -39,15 +39,24 @@ class Trial(db.Model):
     """Represents a single experimental trial."""
     id = db.Column(db.Integer, primary_key=True)
     participant_id = db.Column(db.Integer, db.ForeignKey('participant.id'), nullable=False)
-    geometry_id = db.Column(db.Integer, db.ForeignKey('geometry.id'), nullable=False)
+    geometry_id = db.Column(db.Integer, db.ForeignKey('geometry.id'), nullable=True)  # Nullable for BO trials
+    
+    # BO trial parameters (for trials without predefined geometries)
+    alpha = db.Column(db.Float, nullable=True)
+    beta = db.Column(db.Float, nullable=True)
+    gamma = db.Column(db.Float, nullable=True)
     
     timestamp = db.Column(db.DateTime, server_default=db.func.now())
     raw_data_path = db.Column(db.String(255), nullable=True)
-    source = db.Column(db.String(20), nullable=False, server_default='systematic')
+    source = db.Column(db.String(20), nullable=False, server_default='grid_search')
     
     # Store featurized and survey data as JSON
     processed_features = db.Column(db.JSON, nullable=True)
     survey_responses = db.Column(db.JSON, nullable=True)
+    steps = db.Column(db.JSON, nullable=True) # To store the final list of step timestamps
+    
+    # Soft delete flag
+    deleted = db.Column(db.DateTime, nullable=True)  # Timestamp when deleted, NULL if not deleted
     
     def __repr__(self):
         return f'<Trial {self.id} for Participant {self.participant_id}>'

@@ -100,6 +100,272 @@ footer {
     padding: 1rem;
 }
 
+/* Optimization Screen Styling */
+.optimization-screen {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    padding: 2rem 0;
+}
+
+.optimization-header {
+    color: #37474f;
+    font-weight: 600;
+    margin-bottom: 2rem;
+}
+
+/* Geometry Display Styling */
+.geometry-display {
+    margin-bottom: 1.5rem;
+}
+
+.metric-card {
+    text-align: center;
+    padding: 1rem;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+}
+
+.metric-card:hover {
+    background-color: #e9ecef;
+    transform: translateY(-1px);
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #37474f;
+    margin-bottom: 0.25rem;
+}
+
+.metric-unit {
+    font-size: 0.75rem;
+    color: #adb5bd;
+    font-weight: 400;
+}
+
+/* Action Buttons Styling */
+.geometry-actions {
+    margin: 1.5rem 0;
+}
+
+.btn-test-geometry {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-test-geometry:hover {
+    background-color: #0056b3;
+    border-color: #0056b3;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+.btn-suggest-alternative {
+    background-color: white;
+    border: 1px solid #6c757d;
+    color: #6c757d;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-suggest-alternative:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+}
+
+.btn-manual-loss {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+    font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-manual-loss:hover {
+    background-color: #c82333;
+    border-color: #c82333;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+/* Alternative Geometry Input Styling */
+.alternative-geometry-card {
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(255, 193, 7, 0.1);
+}
+
+.alternative-geometry-card .card-header {
+    background-color: #ffc107;
+    color: #212529;
+    font-weight: 600;
+    border-bottom: 1px solid #ffc107;
+}
+
+.alternative-geometry-input {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease;
+}
+
+.alternative-geometry-input:focus {
+    border-color: #ffc107;
+    box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+}
+
+/* Manual Loss Input Styling */
+.manual-loss-section {
+    border: 1px solid #dc3545;
+    border-radius: 8px;
+    padding: 1rem;
+    background-color: #fff5f5;
+}
+
+.manual-loss-input {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+    transition: border-color 0.2s ease;
+}
+
+.manual-loss-input:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+/* History Table Styling */
+.history-table {
+    font-size: 0.875rem;
+}
+
+.history-table th {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    color: #495057;
+}
+
+.history-table td {
+    vertical-align: middle;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.history-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Progress Metrics Styling */
+.progress-metrics {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.progress-metric {
+    flex: 1;
+    text-align: center;
+    padding: 1rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background-color: white;
+}
+
+.progress-metric-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.progress-metric-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #37474f;
+}
+
+.progress-metric-value.best {
+    color: #28a745;
+}
+
+/* Color Schemes for Different Optimization Types */
+.pain-optimization .card-header.bg-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.effort-optimization .card-header.bg-success {
+    background-color: #28a745 !important;
+    color: white !important;
+}
+
+.instability-optimization .card-header.bg-danger {
+    background-color: #dc3545 !important;
+    color: white !important;
+}
+
+/* Connection Status Styling */
+.connection-status {
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.connection-status.alert-info {
+    background-color: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+}
+
+.connection-status.alert-success {
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+.connection-status.alert-warning {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+}
+
+/* Stopwatch Styling */
+.stopwatch-display {
+    font-family: 'Courier New', monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #37474f;
+    background-color: #f8f9fa;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
 /* Form controls */
 .form-control,
 .form-select {
