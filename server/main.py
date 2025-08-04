@@ -1770,54 +1770,40 @@ class EffortOptimizationManager:
                 Trial.deleted.is_(None)
             ).all()
             
-            # For continue mode, include grid_search and effort_bo trials with NASA TLX data
-            # For restart mode, only include grid_search trials (if any)
-            if restart_mode:
-                # Only include grid_search trials for baseline data
-                trials_data = []
-                for trial in all_trials:
-                    if trial.source == 'grid_search':
-                        effort_score = None
-                        # Check for metabolic cost data
-                        if trial.metabolic_cost is not None:
-                            effort_score = trial.metabolic_cost
-                        elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
-                            effort_score = trial.survey_responses['metabolic_cost']
-                        
-                        if effort_score is not None:
-                            trials_data.append({
-                                'geometry': [trial.alpha, trial.beta, trial.gamma],
-                                'effort_score': effort_score
-                            })
-            else:
-                # Include both grid_search and effort_bo trials with effort data
-                trials_data = []
-                for trial in all_trials:
-                    effort_score = None
-                    
-                    # Check for metabolic cost data (from Grid Search or Effort BO)
-                    if trial.metabolic_cost is not None:
-                        effort_score = trial.metabolic_cost
-                    elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
-                        effort_score = trial.survey_responses['metabolic_cost']
-                    # Check for processed features (direct effort score from Effort BO)
-                    elif (trial.processed_features and 'effort_score' in trial.processed_features):
-                        effort_score = trial.processed_features['effort_score']
-                    
-                    if effort_score is not None:
-                        trials_data.append({
-                            'geometry': [trial.alpha, trial.beta, trial.gamma],
-                            'effort_score': effort_score
-                        })
+            # Check if there's an existing session for this participant
+            session_key = f"effort_bo_{participant_id}"
+            existing_session = self.sessions.get(session_key)
             
-            # Store session data
+            # For continue mode, include effort_bo trials with metabolic cost data
+            # For restart mode, ignore all previous data and start completely fresh
+            if restart_mode:
+                # Start completely fresh - ignore all previous data
+                previous_trials = []
+                debug_print(f"Starting effort optimization in RESTART mode for {participant_id} - ignoring all previous data")
+            else:
+                # Load previous effort optimization trials for this participant (only non-deleted ones)
+                previous_trials = Trial.query.filter_by(
+                    participant_id=participant.id,
+                    source='effort_bo'
+                ).filter(Trial.deleted.is_(None)).all()  # Only non-deleted trials
+                debug_print(f"Starting effort optimization in CONTINUE mode for {participant_id} - loaded {len(previous_trials)} previous effort BO trials")
+            
             session_data = {
                 'participant_id': participant_id,
-                'trials_data': trials_data,
-                'tested_geometries': set((t['geometry'][0], t['geometry'][1], t['geometry'][2]) 
-                                       for t in trials_data),
+                'user_id': participant_id,
+                'trials': [trial_to_dict(t) for t in previous_trials],
+                'tested_geometries': set(),
+                'trial_count': len(previous_trials),
                 'restart_mode': restart_mode
             }
+            
+            # Track previously tested geometries (only if not in restart mode)
+            if not restart_mode:
+                for trial in previous_trials:
+                    if trial.geometry:
+                        session_data['tested_geometries'].add((trial.geometry.alpha, trial.geometry.beta, trial.geometry.gamma))
+                    elif trial.alpha is not None and trial.beta is not None and trial.gamma is not None:
+                        session_data['tested_geometries'].add((trial.alpha, trial.beta, trial.gamma))
             
             session_key = f"effort_bo_{participant_id}"
             self.sessions[session_key] = session_data
@@ -1840,10 +1826,10 @@ class EffortOptimizationManager:
             raise ValueError("No active session found")
         
         session = self.sessions[session_key]
-        trials_data = session['trials_data']
+        trials = session['trials']
         
         # If no trials yet, suggest a random starting geometry
-        if len(trials_data) == 0:
+        if len(trials) == 0:
             return self._suggest_random_geometry()
         
         # Run Bayesian Optimization
@@ -1853,6 +1839,17 @@ class EffortOptimizationManager:
         
         try:
             # Extract X (geometries) and Y (effort scores) from trials
+            trials_data = []
+            for trial in trials:
+                if trial.get('processed_features') and 'effort_score' in trial['processed_features']:
+                    trials_data.append({
+                        'geometry': [trial['alpha'], trial['beta'], trial['gamma']],
+                        'effort_score': trial['processed_features']['effort_score']
+                    })
+            
+            if len(trials_data) == 0:
+                return self._suggest_random_geometry()
+            
             X = np.array([trial['geometry'] for trial in trials_data])
             Y = np.array([[trial['effort_score']] for trial in trials_data])
             
@@ -1968,10 +1965,10 @@ class EffortOptimizationManager:
             session_key = f"effort_bo_{participant_id}"
             if session_key in self.sessions:
                 session = self.sessions[session_key]
-                session['trials_data'].append({
-                    'geometry': [geometry['alpha'], geometry['beta'], geometry['gamma']],
-                    'effort_score': effort_score
-                })
+                # Add trial to session trials list
+                trial_dict = trial_to_dict(trial)
+                session['trials'].append(trial_dict)
+                session['trial_count'] += 1
                 session['tested_geometries'].add((geometry['alpha'], geometry['beta'], geometry['gamma']))
             
             debug_print(f"Recorded effort BO trial: effort_score={effort_score}")
@@ -2063,31 +2060,38 @@ def start_effort_bo_session():
         # Start session
         session_data = effort_bo_sessions.start_session(participant_id, restart_mode)
         
-        # Get history for frontend (including Grid Search trials with metabolic cost)
-        all_trials = Trial.query.filter(
-            Trial.participant_id == participant_id,
-            Trial.deleted.is_(None)
-        ).all()
+        # Include Grid Search trials in the history for display
+        all_trials = session_data['trials'].copy()  # Start with Effort BO trials
         
-        history = []
-        for trial in all_trials:
-            # Include trials with effort data
-            has_effort_data = False
-            # Check for metabolic cost data
-            if trial.metabolic_cost is not None:
-                has_effort_data = True
-            elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
-                has_effort_data = True
-            # Check for processed effort score (from BO trials)
-            elif (trial.processed_features and 'effort_score' in trial.processed_features):
-                has_effort_data = True
+        # Add Grid Search trials with metabolic cost data to the history
+        if not restart_mode:
+            participant = Participant.query.get(participant_id)
+            grid_search_trials = Trial.query.filter_by(
+                participant_id=participant.id,
+                source='grid_search'
+            ).all()
             
-            if ((trial.source == 'grid_search' and has_effort_data) or
-                (trial.source == 'effort_bo')):
+            debug_print(f"Found {len(grid_search_trials)} Grid Search trials")
+            for trial in grid_search_trials:
+                # Check for metabolic cost data
+                has_metabolic_cost = False
+                if trial.metabolic_cost is not None:
+                    has_metabolic_cost = True
+                elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
+                    has_metabolic_cost = True
                 
-                trial_dict = trial_to_dict(trial)
-                trial_dict = clean_nan_values(trial_dict)
-                history.append(trial_dict)
+                if has_metabolic_cost:
+                    trial_dict = trial_to_dict(trial)
+                    # Mark as Grid Search trial for frontend display
+                    trial_dict['source'] = 'grid_search'
+                    all_trials.append(trial_dict)
+                    debug_print(f"Added Grid Search trial {trial.id} with metabolic cost {trial.metabolic_cost or trial.survey_responses.get('metabolic_cost')}")
+                else:
+                    debug_print(f"Grid Search trial {trial.id} has no metabolic cost data")
+        
+        debug_print(f"Total trials in history: {len(all_trials)} (Effort BO: {len(session_data['trials'])}, Grid Search: {len(all_trials) - len(session_data['trials'])})")
+        
+        history = all_trials
         
         response_data = {
             'success': True,

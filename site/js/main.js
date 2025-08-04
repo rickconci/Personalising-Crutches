@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function () {
         historyTbody: document.getElementById('effort-history-tbody'),
         bestScore: document.getElementById('effort-best-score'),
         totalTrials: document.getElementById('effort-total-trials'),
-        suggestNextBtn: document.getElementById('effort-suggest-next-btn'),
+
         exitBtn: document.getElementById('effort-exit-btn')
     };
 
@@ -3069,6 +3069,10 @@ document.addEventListener('DOMContentLoaded', function () {
             // Update home button state
             updateHomeButtonState();
             
+            // Render the history immediately
+            renderEffortHistory();
+            renderEffortProgress();
+            
             // If restart mode or no previous trials, show first geometry input
             if (restartMode || effortState.trials.length === 0) {
                 console.log('Showing first geometry input');
@@ -3770,10 +3774,7 @@ document.addEventListener('DOMContentLoaded', function () {
         effortOptimization.surveyCard.style.display = 'none';
     });
     
-    // Effort suggest next button
-    effortOptimization.suggestNextBtn.addEventListener('click', async () => {
-        await loadNextEffortGeometry();
-    });
+
     
     // Effort exit button
     effortOptimization.exitBtn.addEventListener('click', () => {
