@@ -369,6 +369,21 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
     
+    function updateHomeButtonState() {
+        const homeButton = document.getElementById('home-button');
+        const isOptimizationActive = painState.active || effortState.active || instabilityState.active;
+        
+        if (isOptimizationActive) {
+            homeButton.style.cursor = 'not-allowed';
+            homeButton.style.opacity = '0.6';
+            homeButton.title = 'Please exit optimization session first';
+        } else {
+            homeButton.style.cursor = 'pointer';
+            homeButton.style.opacity = '1';
+            homeButton.title = 'Go to home';
+        }
+    }
+
     function endAllActiveSessions() {
         // End BO session
         if (appState.boSession.active) {
@@ -558,6 +573,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // --- Home Button Logic ---
     document.getElementById('home-button').addEventListener('click', () => {
+        // Check if any optimization session is active
+        if (painState.active || effortState.active || instabilityState.active) {
+            showNotification('Please exit the current optimization session before going home.', 'warning');
+            return;
+        }
+        
         appState.mode = null;
         showScreen('modeSelection');
     });
@@ -786,7 +807,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 <td>${t.processed_features?.instability_loss !== undefined ? Number(t.processed_features.instability_loss).toFixed(4) : '-'}</td>
                 <td>${t.survey_responses?.sus_score !== undefined ? Number(t.survey_responses.sus_score).toFixed(2) : '-'}</td>
                 <td>${t.survey_responses?.nrs_score !== undefined ? t.survey_responses.nrs_score : '-'}</td>
-                <td>${t.survey_responses?.tlx_score !== undefined ? t.survey_responses.tlx_score : '-'}</td>
+                <td>${t.survey_responses?.tlx_score !== undefined ? Number(t.survey_responses.tlx_score).toFixed(2) : '-'}</td>
+                <td>${t.survey_responses?.metabolic_cost !== undefined ? Number(t.survey_responses.metabolic_cost).toFixed(2) : '-'}</td>
                 <td class="text-center">
                     <button class="btn btn-sm btn-outline-danger delete-trial-btn" data-trial-id="${t.id}" data-geometry-id="${t.geometry_id}">
                         🗑️
@@ -1582,7 +1604,12 @@ document.addEventListener('DOMContentLoaded', function () {
             surveyResponses[`tlx_q${index + 1}`] = value;
             tlxScore += value;
         });
-        surveyResponses['tlx_score'] = tlxScore;
+        surveyResponses['tlx_score'] = (tlxScore / 120) * 100; // Scale to 0-100
+
+        // --- Metabolic Cost Input ---
+        const metabolicCostInput = systematic.trialForm.querySelector('#metabolic-cost-input');
+        const metabolicCost = metabolicCostInput.value ? parseFloat(metabolicCostInput.value) : null;
+        surveyResponses['metabolic_cost'] = metabolicCost;
         
         // Grab metrics directly from the UI display
         const stepCountFromUI = parseInt(systematic.stepCount.textContent) || 0;
@@ -2004,6 +2031,9 @@ document.addEventListener('DOMContentLoaded', function () {
             // Hide decision card if it was shown
             bo.painDecisionCard.classList.add('d-none');
             
+            // Update home button state
+            updateHomeButtonState();
+            
             // If restart mode or no previous trials, show first geometry input
             if (restartMode || painState.trials.length === 0) {
                 showFirstGeometryInput();
@@ -2188,6 +2218,9 @@ document.addEventListener('DOMContentLoaded', function () {
         
         // Show objective selection
         bo.objectiveSelectCard.classList.remove('d-none');
+        
+        // Update home button state
+        updateHomeButtonState();
     }
 
     function showFirstGeometryInput() {
@@ -2472,6 +2505,9 @@ document.addEventListener('DOMContentLoaded', function () {
             // Hide decision card and show instability screen
             document.getElementById('instability-bo-decision-card').classList.add('d-none');
             instabilityOptimization.screen.classList.remove('d-none');
+            
+            // Update home button state
+            updateHomeButtonState();
             
             // Start session with backend
             const response = await apiRequest('/api/instability-bo/start', 'POST', {
@@ -2949,7 +2985,7 @@ document.addEventListener('DOMContentLoaded', function () {
             
             console.log('Starting effort optimization for userId:', userId);
             
-            // First, check if there's existing NASA TLX data for this participant
+            // First, check if there's existing metabolic cost data for this participant
             const existingDataResponse = await apiRequest(`/api/effort-bo/check-existing-data?userId=${userId}`);
             
             console.log('Existing data response:', existingDataResponse);
@@ -2988,9 +3024,9 @@ document.addEventListener('DOMContentLoaded', function () {
         
         let summaryText;
         if (totalTrials === 0) {
-            summaryText = `No previous NASA TLX effort data found for this participant.`;
+            summaryText = `No previous metabolic cost data found for this participant.`;
         } else {
-            summaryText = `Found ${totalTrials} trial(s) with NASA TLX effort scores: `;
+            summaryText = `Found ${totalTrials} trial(s) with metabolic cost data: `;
             if (gridSearchTrials > 0 && effortBoTrials > 0) {
                 summaryText += `${gridSearchTrials} from Grid Search mode and ${effortBoTrials} from previous Effort Optimization sessions.`;
             } else if (gridSearchTrials > 0) {
@@ -3029,6 +3065,9 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Hide decision card if it was shown
             document.getElementById('effort-bo-decision-card').classList.add('d-none');
+            
+            // Update home button state
+            updateHomeButtonState();
             
             // If restart mode or no previous trials, show first geometry input
             if (restartMode || effortState.trials.length === 0) {
@@ -3097,14 +3136,14 @@ document.addEventListener('DOMContentLoaded', function () {
             const row = document.createElement('tr');
             // Don't make effort trials clickable - they have no raw data to edit
             
-            // Calculate effort score from NASA TLX (average of all dimensions)
+            // Calculate effort score from metabolic cost
             let effortScore = '-';
-            if (trial.survey_responses && trial.survey_responses.nasa_tlx) {
-                const scores = trial.survey_responses.nasa_tlx;
-                const total = (scores.mental_demand || 0) + (scores.physical_demand || 0) + 
-                             (scores.temporal_demand || 0) + (scores.performance || 0) + 
-                             (scores.effort || 0) + (scores.frustration || 0);
-                effortScore = (total / 6).toFixed(1);
+            if (trial.metabolic_cost !== undefined && trial.metabolic_cost !== null) {
+                effortScore = Number(trial.metabolic_cost).toFixed(2);
+            } else if (trial.survey_responses && trial.survey_responses.metabolic_cost) {
+                effortScore = Number(trial.survey_responses.metabolic_cost).toFixed(2);
+            } else if (trial.processed_features && trial.processed_features.effort_score) {
+                effortScore = Number(trial.processed_features.effort_score).toFixed(2);
             }
             
             // Status
@@ -3128,17 +3167,20 @@ document.addEventListener('DOMContentLoaded', function () {
     function renderEffortProgress() {
         effortOptimization.totalTrials.textContent = effortState.trials.length;
         
-        // Find best effort score (lowest average NASA TLX)
+                    // Find best effort score (lowest metabolic cost)
         let bestScore = null;
         effortState.trials.forEach(trial => {
-            if (trial.survey_responses && trial.survey_responses.nasa_tlx) {
-                const scores = trial.survey_responses.nasa_tlx;
-                const avgScore = ((scores.mental_demand || 0) + (scores.physical_demand || 0) + 
-                                 (scores.temporal_demand || 0) + (scores.performance || 0) + 
-                                 (scores.effort || 0) + (scores.frustration || 0)) / 6;
-                if (bestScore === null || avgScore < bestScore) {
-                    bestScore = avgScore;
-                }
+            let metabolicCost = null;
+            if (trial.metabolic_cost !== undefined && trial.metabolic_cost !== null) {
+                metabolicCost = trial.metabolic_cost;
+            } else if (trial.survey_responses && trial.survey_responses.metabolic_cost) {
+                metabolicCost = trial.survey_responses.metabolic_cost;
+            } else if (trial.processed_features && trial.processed_features.effort_score) {
+                metabolicCost = trial.processed_features.effort_score;
+            }
+            
+            if (metabolicCost !== null && (bestScore === null || metabolicCost < bestScore)) {
+                bestScore = metabolicCost;
             }
         });
         
@@ -3169,27 +3211,19 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     async function submitEffortSurvey() {
-        const formData = new FormData(effortOptimization.surveyForm);
-        const nasaTlxData = {
-            mental_demand: parseInt(formData.get('mental_demand')),
-            physical_demand: parseInt(formData.get('physical_demand')),
-            temporal_demand: parseInt(formData.get('temporal_demand')),
-            performance: parseInt(formData.get('performance')),
-            effort: parseInt(formData.get('effort')),
-            frustration: parseInt(formData.get('frustration'))
-        };
+        const metabolicCostInput = document.getElementById('effort-metabolic-cost-input');
+        const metabolicCost = parseFloat(metabolicCostInput.value);
         
-        // Calculate average effort score
-        const effortScore = (nasaTlxData.mental_demand + nasaTlxData.physical_demand + 
-                           nasaTlxData.temporal_demand + nasaTlxData.performance + 
-                           nasaTlxData.effort + nasaTlxData.frustration) / 6;
+        if (!metabolicCost || isNaN(metabolicCost)) {
+            showNotification('Please enter a valid metabolic cost value', 'danger');
+            return;
+        }
         
         try {
             const response = await apiRequest('/api/effort-bo/record-trial', 'POST', {
                 userId: effortState.userId,
                 geometry: effortState.currentGeometry,
-                effortScore: effortScore,
-                surveyData: nasaTlxData
+                effortScore: metabolicCost
             });
             
             if (response.trial) {
@@ -3207,7 +3241,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Get next geometry
                 await loadNextEffortGeometry();
                 
-                showNotification(`Effort score ${effortScore.toFixed(1)} recorded successfully!`, 'success');
+                showNotification(`Metabolic cost ${metabolicCost.toFixed(2)} recorded successfully!`, 'success');
             }
         } catch (error) {
             showNotification(`Failed to record effort score: ${error.message}`, 'danger');
@@ -3219,6 +3253,7 @@ document.addEventListener('DOMContentLoaded', function () {
         showScreen('bo');
         bo.objectiveSelectCard.classList.remove('d-none');
         resetEffortOptimizationUI();
+        updateHomeButtonState();
         showNotification('Effort optimization session ended', 'info');
     }
     
@@ -3554,6 +3589,9 @@ document.addEventListener('DOMContentLoaded', function () {
         // Hide instability screen, show objective selection
         instabilityOptimization.screen.classList.add('d-none');
         bo.objectiveSelectCard.classList.remove('d-none');
+        
+        // Update home button state
+        updateHomeButtonState();
     }
 
     // ========================================================================================
@@ -3793,4 +3831,5 @@ document.addEventListener('DOMContentLoaded', function () {
     
     showScreen('modeSelection');
     loadInitialData();
+    updateHomeButtonState();
 }); 

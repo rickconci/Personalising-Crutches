@@ -183,7 +183,7 @@
                                                 </div>
 
                                                 <!-- Section 3: Workload (NASA-TLX) -->
-                                                <div class="card">
+                                                <div class="card mb-3">
                                                     <div class="card-header">
                                                         <h6 class="mb-0">Workload Survey (NASA-TLX)</h6>
                                                     </div>
@@ -218,6 +218,20 @@
                                                             <select class="form-select form-select-sm tlx-question">
                                                                 <script>for(let i=0;i<=20;i++) document.write(`<option value="${i}">${i}</option>`);</script>
                                                             </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Section 4: Metabolic Cost Input -->
+                                                <div class="card">
+                                                    <div class="card-header">
+                                                        <h6 class="mb-0">Metabolic Cost Input</h6>
+                                                    </div>
+                                                    <div class="card-body">
+                                                        <p class="text-muted small">Enter the metabolic cost value from the separate analysis computer</p>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small">Metabolic Cost (ml/kg/min)</label>
+                                                            <input type="number" class="form-control" id="metabolic-cost-input" step="0.1" placeholder="Enter metabolic cost value">
                                                         </div>
                                                     </div>
                                                 </div>
@@ -335,6 +349,7 @@
                                             <th>SUS Score (/100)</th>
                                             <th>NRS Score (/10)</th>
                                             <th>TLX Score (/100)</th>
+                                            <th>Metabolic Cost</th>
                                             <th></th>
                                         </tr>
                                     </thead>
@@ -759,7 +774,7 @@
                         <div class="card-body">
                             <div class="alert alert-info">
                                 <i class="fas fa-info-circle me-2"></i>
-                                <strong>Existing NASA TLX effort data found for this participant!</strong>
+                                <strong>Existing metabolic cost data found for this participant!</strong>
                                 <div class="mt-2">
                                     <span id="effort-existing-data-summary">Loading...</span>
                                 </div>
@@ -774,7 +789,7 @@
                                             <h5 class="card-title text-primary">
                                                 <i class="fas fa-play me-2"></i>Continue Optimization
                                             </h5>
-                                            <p class="card-text">Load all previous NASA TLX data (from Grid Search and Effort BO) into the optimization and suggest the next geometry based on all historical data.</p>
+                                            <p class="card-text">Load all previous metabolic cost data (from Grid Search and Effort BO) into the optimization and suggest the next geometry based on all historical data.</p>
                                             <button class="btn btn-primary" id="effort-continue-btn">Continue with Existing Data</button>
                                         </div>
                                     </div>
@@ -786,7 +801,7 @@
                                                 <i class="fas fa-refresh me-2"></i>Restart Optimization
                                             </h5>
                                             <p class="card-text">Start fresh optimization by inputting the starting geometry. Previous effort data will be preserved but marked as inactive for this session.</p>
-                                            <button class="btn btn-danger" id="effort-restart-btn">Start Fresh</button>
+                                            <button class="btn btn-success" id="effort-restart-btn">Start Fresh</button>
                                         </div>
                                     </div>
                                 </div>
@@ -890,88 +905,21 @@
                                 </div>
                             </div>
                             
-                            <!-- NASA TLX Survey Card -->
+                            <!-- Metabolic Cost Input Card -->
                             <div class="card mt-3" id="effort-survey-card" style="display: none;">
                                 <div class="card-header bg-success text-white">
-                                    <h3 class="fs-6 m-0">NASA TLX Effort Assessment</h3>
+                                    <h3 class="fs-6 m-0">Metabolic Cost Input</h3>
                                 </div>
                                 <div class="card-body">
                                     <form id="effort-survey-form">
                                         <div class="mb-3">
-                                            <label class="form-label">Mental Demand: How mentally demanding was the task?</label>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Very Low</span>
-                                                <span>Very High</span>
-                                            </div>
-                                            <input type="range" class="form-range" name="mental_demand" min="1" max="21" value="11" step="1">
-                                            <div class="text-center small">
-                                                <span class="effort-value">11</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label">Physical Demand: How physically demanding was the task?</label>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Very Low</span>
-                                                <span>Very High</span>
-                                            </div>
-                                            <input type="range" class="form-range" name="physical_demand" min="1" max="21" value="11" step="1">
-                                            <div class="text-center small">
-                                                <span class="effort-value">11</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label">Temporal Demand: How hurried or rushed was the pace of the task?</label>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Very Low</span>
-                                                <span>Very High</span>
-                                            </div>
-                                            <input type="range" class="form-range" name="temporal_demand" min="1" max="21" value="11" step="1">
-                                            <div class="text-center small">
-                                                <span class="effort-value">11</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label">Performance: How successful were you in accomplishing what you were asked to do?</label>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Perfect</span>
-                                                <span>Failure</span>
-                                            </div>
-                                            <input type="range" class="form-range" name="performance" min="1" max="21" value="11" step="1">
-                                            <div class="text-center small">
-                                                <span class="effort-value">11</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label">Effort: How hard did you have to work to accomplish your level of performance?</label>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Very Low</span>
-                                                <span>Very High</span>
-                                            </div>
-                                            <input type="range" class="form-range" name="effort" min="1" max="21" value="11" step="1">
-                                            <div class="text-center small">
-                                                <span class="effort-value">11</span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label">Frustration: How insecure, discouraged, irritated, stressed, and annoyed were you?</label>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Very Low</span>
-                                                <span>Very High</span>
-                                            </div>
-                                            <input type="range" class="form-range" name="frustration" min="1" max="21" value="11" step="1">
-                                            <div class="text-center small">
-                                                <span class="effort-value">11</span>
-                                            </div>
+                                            <label class="form-label">Enter the metabolic cost value from the separate analysis computer</label>
+                                            <input type="number" class="form-control" id="effort-metabolic-cost-input" step="0.1" placeholder="Enter metabolic cost value (ml/kg/min)">
                                         </div>
                                         
                                         <div class="d-grid gap-2 mt-4">
                                             <button type="submit" class="btn btn-success">
-                                                <i class="fas fa-save me-2"></i>Submit Effort Assessment
+                                                <i class="fas fa-save me-2"></i>Submit Metabolic Cost
                                             </button>
                                             <button type="button" id="effort-survey-cancel-btn" class="btn btn-secondary">
                                                 Cancel

@@ -95,7 +95,8 @@ def trial_to_dict(t):
         'survey_responses': t.survey_responses,
         'processed_features': t.processed_features,
         'steps': t.steps,
-        'source': t.source
+        'source': t.source,
+        'metabolic_cost': t.metabolic_cost
     }
     
     # Check for any NaN values in the result
@@ -439,7 +440,8 @@ def save_trial_results():
             survey_responses=data['surveyResponses'],
             processed_features=data['metrics'],
             steps=data['steps'], # Save the final step timestamps
-            source='grid_search'
+            source='grid_search',
+            metabolic_cost=data['surveyResponses'].get('metabolic_cost')
         )
         db.session.add(new_trial)
         db.session.commit()
@@ -1774,32 +1776,30 @@ class EffortOptimizationManager:
                 # Only include grid_search trials for baseline data
                 trials_data = []
                 for trial in all_trials:
-                    if (trial.source == 'grid_search' and 
-                        trial.survey_responses and 
-                        'nasa_tlx' in trial.survey_responses):
+                    if trial.source == 'grid_search':
+                        effort_score = None
+                        # Check for metabolic cost data
+                        if trial.metabolic_cost is not None:
+                            effort_score = trial.metabolic_cost
+                        elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
+                            effort_score = trial.survey_responses['metabolic_cost']
                         
-                        scores = trial.survey_responses['nasa_tlx']
-                        effort_score = (scores.get('mental_demand', 0) + scores.get('physical_demand', 0) + 
-                                      scores.get('temporal_demand', 0) + scores.get('performance', 0) + 
-                                      scores.get('effort', 0) + scores.get('frustration', 0)) / 6
-                        
-                        trials_data.append({
-                            'geometry': [trial.alpha, trial.beta, trial.gamma],
-                            'effort_score': effort_score
-                        })
+                        if effort_score is not None:
+                            trials_data.append({
+                                'geometry': [trial.alpha, trial.beta, trial.gamma],
+                                'effort_score': effort_score
+                            })
             else:
                 # Include both grid_search and effort_bo trials with effort data
                 trials_data = []
                 for trial in all_trials:
                     effort_score = None
                     
-                    # Check for NASA TLX data (from Grid Search or Effort BO)
-                    if (trial.survey_responses and 'nasa_tlx' in trial.survey_responses):
-                        scores = trial.survey_responses['nasa_tlx']
-                        effort_score = (scores.get('mental_demand', 0) + scores.get('physical_demand', 0) + 
-                                      scores.get('temporal_demand', 0) + scores.get('performance', 0) + 
-                                      scores.get('effort', 0) + scores.get('frustration', 0)) / 6
-                    
+                    # Check for metabolic cost data (from Grid Search or Effort BO)
+                    if trial.metabolic_cost is not None:
+                        effort_score = trial.metabolic_cost
+                    elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
+                        effort_score = trial.survey_responses['metabolic_cost']
                     # Check for processed features (direct effort score from Effort BO)
                     elif (trial.processed_features and 'effort_score' in trial.processed_features):
                         effort_score = trial.processed_features['effort_score']
@@ -1956,8 +1956,9 @@ class EffortOptimizationManager:
                 beta=geometry['beta'], 
                 gamma=geometry['gamma'],
                 source='effort_bo',
-                survey_responses={'nasa_tlx': survey_data} if survey_data else None,
-                processed_features={'effort_score': effort_score} if not survey_data else None
+                survey_responses=None,  # No survey for metabolic cost trials
+                processed_features={'effort_score': effort_score},
+                metabolic_cost=effort_score  # Store metabolic cost directly
             )
             
             db.session.add(trial)
@@ -2012,20 +2013,15 @@ def check_existing_effort_data():
             # Debug: Print trial info
             debug_print(f"Checking trial {trial.id}: source={trial.source}, survey_responses={trial.survey_responses}, processed_features={trial.processed_features}")
             
-            # Check for NASA TLX data (look for TLX fields or TLX score)
-            if trial.survey_responses:
-                survey_data = trial.survey_responses
-                # Check for TLX score or individual TLX questions
-                if ('tlx_score' in survey_data or 
-                    'tlx_q1' in survey_data or 
-                    'tlx_q2' in survey_data or 
-                    'tlx_q3' in survey_data or 
-                    'tlx_q4' in survey_data or 
-                    'tlx_q5' in survey_data):
-                    has_effort_data = True
-                    debug_print(f"Found NASA TLX data in trial {trial.id}")
+            # Check for metabolic cost data
+            if trial.metabolic_cost is not None:
+                has_effort_data = True
+                debug_print(f"Found metabolic cost data in trial {trial.id}")
+            elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
+                has_effort_data = True
+                debug_print(f"Found metabolic cost data in trial {trial.id}")
             
-            # Check for processed effort score
+            # Check for processed effort score (from BO trials)
             if (trial.processed_features and 'effort_score' in trial.processed_features):
                 has_effort_data = True
                 debug_print(f"Found effort score in trial {trial.id}")
@@ -2067,7 +2063,7 @@ def start_effort_bo_session():
         # Start session
         session_data = effort_bo_sessions.start_session(participant_id, restart_mode)
         
-        # Get history for frontend (including Grid Search trials with NASA TLX)
+        # Get history for frontend (including Grid Search trials with metabolic cost)
         all_trials = Trial.query.filter(
             Trial.participant_id == participant_id,
             Trial.deleted.is_(None)
@@ -2077,16 +2073,14 @@ def start_effort_bo_session():
         for trial in all_trials:
             # Include trials with effort data
             has_effort_data = False
-            if trial.survey_responses:
-                survey_data = trial.survey_responses
-                # Check for TLX score or individual TLX questions
-                if ('tlx_score' in survey_data or 
-                    'tlx_q1' in survey_data or 
-                    'tlx_q2' in survey_data or 
-                    'tlx_q3' in survey_data or 
-                    'tlx_q4' in survey_data or 
-                    'tlx_q5' in survey_data):
-                    has_effort_data = True
+            # Check for metabolic cost data
+            if trial.metabolic_cost is not None:
+                has_effort_data = True
+            elif (trial.survey_responses and 'metabolic_cost' in trial.survey_responses):
+                has_effort_data = True
+            # Check for processed effort score (from BO trials)
+            elif (trial.processed_features and 'effort_score' in trial.processed_features):
+                has_effort_data = True
             
             if ((trial.source == 'grid_search' and has_effort_data) or
                 (trial.source == 'effort_bo')):

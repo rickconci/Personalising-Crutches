@@ -55,6 +55,9 @@ class Trial(db.Model):
     survey_responses = db.Column(db.JSON, nullable=True)
     steps = db.Column(db.JSON, nullable=True) # To store the final list of step timestamps
     
+    # Metabolic cost field for effort optimization
+    metabolic_cost = db.Column(db.Float, nullable=True)
+    
     # Soft delete flag
     deleted = db.Column(db.DateTime, nullable=True)  # Timestamp when deleted, NULL if not deleted
     
