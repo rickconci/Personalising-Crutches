@@ -120,10 +120,23 @@ document.addEventListener('DOMContentLoaded', function () {
         // Pain BO Decision Card
         painDecisionCard: document.getElementById('pain-bo-decision-card'),
         painExistingDataSummary: document.getElementById('pain-existing-data-summary'),
-        instabilityExistingDataSummary: document.getElementById('instability-existing-data-summary'),
         painContinueBtn: document.getElementById('pain-continue-btn'),
         painRestartBtn: document.getElementById('pain-restart-btn'),
         painDecisionBackBtn: document.getElementById('pain-decision-back-btn'),
+        
+        // Effort BO Decision Card
+        effortDecisionCard: document.getElementById('effort-bo-decision-card'),
+        effortExistingDataSummary: document.getElementById('effort-existing-data-summary'),
+        effortContinueBtn: document.getElementById('effort-continue-btn'),
+        effortRestartBtn: document.getElementById('effort-restart-btn'),
+        effortDecisionBackBtn: document.getElementById('effort-decision-back-btn'),
+        
+        // Instability BO Decision Card
+        instabilityDecisionCard: document.getElementById('instability-bo-decision-card'),
+        instabilityExistingDataSummary: document.getElementById('instability-existing-data-summary'),
+        instabilityContinueBtn: document.getElementById('instability-continue-btn'),
+        instabilityRestartBtn: document.getElementById('instability-restart-btn'),
+        instabilityDecisionBackBtn: document.getElementById('instability-decision-back-btn'),
     };
 
     // Elements for Pain Optimization
@@ -200,6 +213,12 @@ document.addEventListener('DOMContentLoaded', function () {
         surveyCard: document.getElementById('instability-survey-card'),
         surveyForm: document.getElementById('instability-survey-form'),
         surveyCancelBtn: document.getElementById('instability-survey-cancel-btn'),
+        firstGeometryCard: document.getElementById('instability-first-geometry-card'),
+        firstAlphaInput: document.getElementById('instability-first-alpha'),
+        firstBetaInput: document.getElementById('instability-first-beta'),
+        firstGammaInput: document.getElementById('instability-first-gamma'),
+        setFirstGeometryBtn: document.getElementById('instability-set-first-geometry-btn'),
+        cancelFirstGeometryBtn: document.getElementById('instability-cancel-first-geometry-btn'),
         historyTbody: document.getElementById('instability-history-tbody'),
         bestLoss: document.getElementById('instability-best-loss'),
         totalTrials: document.getElementById('instability-total-trials'),
@@ -729,7 +748,7 @@ document.addEventListener('DOMContentLoaded', function () {
         
         if (!participantId) {
             systematic.participantTrialsTitle.textContent = 'Participant Trials';
-            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-muted">Select a participant to see their trials.</td></tr>`;
+            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="20" class="text-center text-muted">Select a participant to see their trials.</td></tr>`;
             return;
         }
         
@@ -744,14 +763,14 @@ document.addEventListener('DOMContentLoaded', function () {
         
         if (!participant) {
             systematic.participantTrialsTitle.textContent = 'Participant Trials';
-            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-muted">Participant not found.</td></tr>`;
+            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="20" class="text-center text-muted">Participant not found.</td></tr>`;
             return;
         }
         
         systematic.participantTrialsTitle.textContent = `${participant.name}'s Trials`;
         
         if (participantTrials.length === 0) {
-            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="13" class="text-center text-muted">No Grid Search trials recorded yet for this participant.</td></tr>`;
+            systematic.participantTrialsTableBody.innerHTML = `<tr><td colspan="20" class="text-center text-muted">No Grid Search trials recorded yet for this participant.</td></tr>`;
             return;
         }
 
@@ -795,6 +814,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 trialNumber = nonControlTrialsBefore + 1;
             }
             
+            // Get participant characteristics
+            const characteristics = participant.characteristics || {};
+            const age = characteristics.age || '-';
+            const sex = characteristics.sex || '-';
+            const height = characteristics.height || '-';
+            const weight = characteristics.weight || '-';
+            const forearm = characteristics.forearm_length || '-';
+            const activity = characteristics.activity_level || '-';
+            const crutchExperience = characteristics.previous_crutch_experience !== undefined ? 
+                (characteristics.previous_crutch_experience ? 'Yes' : 'No') : '-';
+            
             row.innerHTML = `
                 <td>${trialNumber}</td>
                 <td>${t.geometry_name || 'Unknown'}</td>
@@ -803,6 +833,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 <td>${t.gamma ?? '-'}°</td>
                 <td>${isToday ? 'Today' : trialDate.toLocaleDateString()}</td>
                 <td>${trialDate.toLocaleTimeString()}</td>
+                <td>${age}</td>
+                <td>${sex}</td>
+                <td>${height}</td>
+                <td>${weight}</td>
+                <td>${forearm}</td>
+                <td>${activity}</td>
+                <td>${crutchExperience}</td>
                 <td>${Number(t.processed_features?.step_count ?? NaN) || '-'}</td>
                 <td>${t.processed_features?.instability_loss !== undefined ? Number(t.processed_features.instability_loss).toFixed(4) : '-'}</td>
                 <td>${t.survey_responses?.sus_score !== undefined ? Number(t.survey_responses.sus_score).toFixed(2) : '-'}</td>
@@ -2043,7 +2080,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             
             const modeText = restartMode ? 'restarted' : 'continued';
-            showNotification(`Pain optimization ${modeText} for ${userId}`, 'success');
+            showNotification(`Pain optimization ${modeText}`, 'success');
             
         } catch (error) {
             showNotification(`Failed to start pain optimization: ${error.message}`, 'danger');
@@ -2477,7 +2514,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function showInstabilityOptimizationDecision(existingData, userId) {
         // Hide objective selection and show decision card
         bo.objectiveSelectCard.classList.add('d-none');
-        document.getElementById('instability-bo-decision-card').classList.remove('d-none');
+        bo.instabilityDecisionCard.classList.remove('d-none');
         
         // Update the summary text
         const gridSearchTrials = existingData.grid_search_trials;
@@ -2502,12 +2539,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function startInstabilityOptimizationSession(userId, restartMode = false) {
         try {
-            // Hide decision card and show instability screen
-            document.getElementById('instability-bo-decision-card').classList.add('d-none');
-            instabilityOptimization.screen.classList.remove('d-none');
+            // Show the instability optimization screen
+            showInstabilityOptimizationScreen();
             
-            // Update home button state
-            updateHomeButtonState();
+            // Hide decision card if it was shown
+            bo.instabilityDecisionCard.classList.add('d-none');
             
             // Start session with backend
             const response = await apiRequest('/api/instability-bo/start', 'POST', {
@@ -2522,18 +2558,29 @@ document.addEventListener('DOMContentLoaded', function () {
             instabilityState.currentTrialNumber = response.trial_count + 1;
             instabilityState.restartMode = restartMode;
             
+            // Update home button state after setting active state
+            updateHomeButtonState();
+            
             // Set currentParticipant for data analysis (need participant ID, not name)
             const participantId = bo.participantSelect.value;
             appState.currentParticipant = parseInt(participantId);
-            
-            // Load first geometry (now that session is initialized)
-            await loadNextInstabilityGeometry();
             
             // Update history and progress
             renderInstabilityHistory();
             renderInstabilityProgress();
             
-            showNotification(`Instability optimization started in ${restartMode ? 'RESTART' : 'CONTINUE'} mode`, 'success');
+            // If restart mode or no previous trials, show first geometry input
+            if (restartMode || instabilityState.trials.length === 0) {
+                console.log('Showing first geometry input for instability');
+                showFirstInstabilityGeometryInput();
+            } else {
+                console.log('Loading next geometry from BO for instability');
+                // Load next geometry from BO
+                await loadNextInstabilityGeometry();
+            }
+            
+            const modeText = restartMode ? 'restarted' : 'continued';
+            showNotification(`Instability optimization ${modeText}`, 'success');
             
         } catch (error) {
             showNotification(`Failed to start instability optimization session: ${error.message}`, 'danger');
@@ -2564,22 +2611,36 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function showInstabilityOptimizationScreen() {
+        // Hide objective selection
+        bo.objectiveSelectCard.classList.add('d-none');
+        // Show instability optimization screen
+        instabilityOptimization.screen.classList.remove('d-none');
+        
+        // Update trial history
+        renderInstabilityHistory();
+        renderInstabilityProgress();
+    }
+    
     function displayInstabilityGeometry(geometry) {
         instabilityOptimization.trialNumber.textContent = geometry.trial_number || instabilityState.currentTrialNumber;
         instabilityOptimization.alphaDisplay.textContent = `${geometry.alpha}°`;
         instabilityOptimization.betaDisplay.textContent = `${geometry.beta}°`;
         instabilityOptimization.gammaDisplay.textContent = `${geometry.gamma}°`;
         
-        // Reset UI state
+        // Reset UI state - hide connection elements initially, show geometry actions
         instabilityOptimization.resultsCard.classList.add('d-none');
         instabilityOptimization.surveyCard.classList.add('d-none');
+        instabilityOptimization.connectionStatus.classList.add('d-none');
+        instabilityOptimization.connectBtn.classList.add('d-none');
+        instabilityOptimization.startStopBtn.classList.add('d-none');
         instabilityState.isConnected = false;
         instabilityState.isCollecting = false;
         
-        // Show geometry actions immediately (like Pain and Effort optimization)
+        // Show geometry actions (Suggest Alternative, Assign Manual Loss, Test Geometry)
         document.getElementById('instability-geometry-actions').style.display = 'block';
         
-        updateInstabilityConnectionStatus();
+        // Don't call updateInstabilityConnectionStatus() here as it shows the connection elements
     }
 
     function updateInstabilityConnectionStatus() {
@@ -3008,19 +3069,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function showEffortOptimizationDecision(existingData) {
-        console.log('Showing effort optimization decision with data:', existingData);
-        
         // Hide objective selection
         bo.objectiveSelectCard.classList.add('d-none');
         // Show decision card
-        document.getElementById('effort-bo-decision-card').classList.remove('d-none');
-        
-        console.log('Decision card should now be visible');
+        bo.effortDecisionCard.classList.remove('d-none');
         
         // Update the summary text
-        const gridSearchTrials = existingData.gridSearchCount || 0;
-        const effortBoTrials = existingData.effortBoCount || 0;
-        const totalTrials = existingData.trialCount || 0;
+        const gridSearchTrials = existingData.grid_search_trials || 0;
+        const effortBoTrials = existingData.effort_bo_trials || 0;
+        const totalTrials = existingData.total_metabolic_trials || 0;
         
         let summaryText;
         if (totalTrials === 0) {
@@ -3036,7 +3093,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
         
-        document.getElementById('effort-existing-data-summary').textContent = summaryText;
+        bo.effortExistingDataSummary.textContent = summaryText;
     }
     
     async function startEffortOptimizationSession(userId, restartMode) {
@@ -3060,11 +3117,10 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('Effort state after setup:', effortState);
             
             // Show the effort optimization screen
-            console.log('About to call showScreen("effortOptimization")');
-            showScreen('effortOptimization');
+            showEffortOptimizationScreen();
             
             // Hide decision card if it was shown
-            document.getElementById('effort-bo-decision-card').classList.add('d-none');
+            bo.effortDecisionCard.classList.add('d-none');
             
             // Update home button state
             updateHomeButtonState();
@@ -3075,16 +3131,16 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // If restart mode or no previous trials, show first geometry input
             if (restartMode || effortState.trials.length === 0) {
-                console.log('Showing first geometry input');
+                console.log('Showing first geometry input for effort');
                 showFirstEffortGeometryInput();
             } else {
-                console.log('Loading next geometry from BO');
+                console.log('Loading next geometry from BO for effort');
                 // Load next geometry from BO
                 await loadNextEffortGeometry();
             }
             
             const modeText = restartMode ? 'restarted' : 'continued';
-            showNotification(`Effort optimization ${modeText} for ${userId}`, 'success');
+            showNotification(`Effort optimization ${modeText}`, 'success');
             
         } catch (error) {
             console.error('Error in startEffortOptimizationSession:', error);
@@ -3115,6 +3171,17 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (error) {
             showNotification(`Failed to load next geometry: ${error.message}`, 'danger');
         }
+    }
+    
+    function showEffortOptimizationScreen() {
+        // Hide objective selection
+        bo.objectiveSelectCard.classList.add('d-none');
+        // Show effort optimization screen
+        effortOptimization.screen.classList.remove('d-none');
+        
+        // Update trial history
+        renderEffortHistory();
+        renderEffortProgress();
     }
     
     function displayEffortGeometry(geometry) {
@@ -3374,13 +3441,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function showFirstEffortGeometryInput() {
+        // Hide the current geometry display and show input form
+        effortOptimization.screen.querySelector('.card').style.display = 'none';
         effortOptimization.firstGeometryCard.style.display = 'block';
-        effortOptimization.testGeometryBtn.style.display = 'none';
     }
     
     function hideFirstEffortGeometryInput() {
+        // Hide input form and show geometry display
         effortOptimization.firstGeometryCard.style.display = 'none';
-        effortOptimization.testGeometryBtn.style.display = 'block';
+        effortOptimization.screen.querySelector('.card').style.display = 'block';
     }
     
     function setFirstEffortGeometry() {
@@ -3394,6 +3463,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         
         effortState.currentGeometry = { alpha, beta, gamma };
+        displayEffortGeometry(effortState.currentGeometry);
         hideFirstEffortGeometryInput();
         showNotification('First geometry set! Click "Test This Geometry" to begin.', 'success');
     }
@@ -3598,6 +3668,47 @@ document.addEventListener('DOMContentLoaded', function () {
         updateHomeButtonState();
     }
 
+    // Instability First Geometry Functions (like Pain Optimization)
+    function showFirstInstabilityGeometryInput() {
+        // Hide the current geometry display and show input form
+        instabilityOptimization.screen.querySelector('.card').style.display = 'none';
+        instabilityOptimization.firstGeometryCard.style.display = 'block';
+    }
+
+    function hideFirstInstabilityGeometryInput() {
+        // Hide input form and show geometry display
+        instabilityOptimization.firstGeometryCard.style.display = 'none';
+        instabilityOptimization.screen.querySelector('.card').style.display = 'block';
+    }
+
+    function setFirstInstabilityGeometry() {
+        const alpha = parseInt(document.getElementById('instability-first-alpha').value);
+        const beta = parseInt(document.getElementById('instability-first-beta').value);
+        const gamma = parseInt(document.getElementById('instability-first-gamma').value);
+        
+        // Validate inputs
+        if (isNaN(alpha) || isNaN(beta) || isNaN(gamma)) {
+            showNotification('Please enter valid geometry values', 'danger');
+            return;
+        }
+        
+        // Set the geometry
+        instabilityState.currentGeometry = {
+            alpha: alpha,
+            beta: beta,
+            gamma: gamma,
+            trial_number: 1
+        };
+        
+        // Hide first geometry input and show current geometry
+        hideFirstInstabilityGeometryInput();
+        
+        // Display the geometry
+        displayInstabilityGeometry(instabilityState.currentGeometry);
+        
+        showNotification('First geometry set successfully', 'success');
+    }
+
     // ========================================================================================
     // === INSTABILITY OPTIMIZATION EVENT LISTENERS ==========================================
     // ========================================================================================
@@ -3668,6 +3779,16 @@ document.addEventListener('DOMContentLoaded', function () {
         exitInstabilityOptimization();
     });
 
+    // Instability First Geometry Event Listeners
+    document.getElementById('instability-set-first-geometry-btn').addEventListener('click', () => {
+        setFirstInstabilityGeometry();
+    });
+
+    document.getElementById('instability-cancel-first-geometry-btn').addEventListener('click', () => {
+        hideFirstInstabilityGeometryInput();
+        showNotification('First geometry input cancelled', 'info');
+    });
+
     // ========================================================================================
     // === INSTABILITY DECISION EVENT LISTENERS ===============================================
     // ========================================================================================
@@ -3695,9 +3816,13 @@ document.addEventListener('DOMContentLoaded', function () {
         showInstabilityAlternativeGeometryInput();
     });
     
-    // Instability test geometry button (show survey like Pain/Effort)
+    // Instability test geometry button (show IMU connection elements)
     instabilityOptimization.testGeometryBtn.addEventListener('click', () => {
-        showInstabilitySurvey();
+        // Show IMU connection elements (like Grid Search)
+        instabilityOptimization.connectionStatus.classList.remove('d-none');
+        instabilityOptimization.connectBtn.classList.remove('d-none');
+        instabilityOptimization.startStopBtn.classList.remove('d-none');
+        updateInstabilityConnectionStatus();
     });
     
     // Instability manual loss button

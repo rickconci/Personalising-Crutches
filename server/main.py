@@ -1809,7 +1809,7 @@ class EffortOptimizationManager:
             self.sessions[session_key] = session_data
             
             debug_print(f"Started effort optimization session for participant {participant_id}")
-            debug_print(f"Loaded {len(trials_data)} trials with effort data")
+            debug_print(f"Loaded {len(previous_trials)} trials with effort data")
             debug_print(f"Restart mode: {restart_mode}")
             
             return session_data
@@ -1901,7 +1901,7 @@ class EffortOptimizationManager:
                 'alpha': a,
                 'beta': b,
                 'gamma': g,
-                'trial_number': len(trials_data) + 1,
+                'trial_number': len(trials) + 1,
                 'source': 'BO_suggestion'
             }
             
@@ -2036,9 +2036,9 @@ def check_existing_effort_data():
         
         return jsonify({
             'has_existing_data': has_existing_data,
-            'trialCount': total_count,
-            'gridSearchCount': grid_search_count,
-            'effortBoCount': effort_bo_count
+            'total_metabolic_trials': total_count,
+            'grid_search_trials': grid_search_count,
+            'effort_bo_trials': effort_bo_count
         })
         
     except Exception as e:
@@ -2099,7 +2099,7 @@ def start_effort_bo_session():
             'history': history,
             'sessionData': {
                 'participantId': participant_id,
-                'trialsCount': len(session_data['trials_data']),
+                'trialsCount': len(session_data['trials']),
                 'restartMode': restart_mode
             }
         }
@@ -2231,4 +2231,4 @@ def clean_nan_values(obj):
         return obj
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) 
+    app.run(debug=True, port=5001) 

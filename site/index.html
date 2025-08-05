@@ -344,6 +344,13 @@
                                             <th>γ</th>
                                             <th>Date</th>
                                             <th>Time</th>
+                                            <th>Age</th>
+                                            <th>Sex</th>
+                                            <th>Height (cm)</th>
+                                            <th>Weight (kg)</th>
+                                            <th>Forearm (cm)</th>
+                                            <th>Activity</th>
+                                            <th>Crutch Exp.</th>
                                             <th>Steps</th>
                                             <th>Instability Loss</th>
                                             <th>SUS Score (/100)</th>
@@ -821,8 +828,8 @@
                     <div class="row">
                         <div class="col-lg-6">
                             <!-- Current Geometry Card -->
-                            <div class="card">
-                                <div class="card-header bg-success text-white">
+                            <div class="card" id="effort-current-geometry-card">
+                                <div class="card-header bg-warning text-dark">
                                     <h3 class="fs-6 m-0">Current Geometry</h3>
                                 </div>
                                 <div class="card-body">
@@ -907,7 +914,7 @@
                             
                             <!-- Metabolic Cost Input Card -->
                             <div class="card mt-3" id="effort-survey-card" style="display: none;">
-                                <div class="card-header bg-success text-white">
+                                <div class="card-header bg-danger text-white">
                                     <h3 class="fs-6 m-0">Metabolic Cost Input</h3>
                                 </div>
                                 <div class="card-body">
@@ -1066,9 +1073,9 @@
                     <div class="row g-4">
                         <!-- Current Geometry and Data Collection Card -->
                         <div class="col-lg-6">
-                            <div class="card">
-                                <div class="card-header bg-danger text-white">
-                                    <h3 class="fs-6 m-0">Instability Optimization - Trial <span id="instability-trial-number">1</span></h3>
+                            <div class="card" id="instability-current-geometry-card">
+                                <div class="card-header bg-warning text-dark">
+                                    <h3 class="fs-6 m-0">Current Geometry - Trial <span id="instability-trial-number">1</span></h3>
                                 </div>
                                 <div class="card-body">
                                     <!-- Current Geometry Display -->
@@ -1151,6 +1158,40 @@
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- First Geometry Input Card -->
+                            <div class="card mt-3" id="instability-first-geometry-card" style="display: none;">
+                                <div class="card-header bg-primary text-white">
+                                    <h3 class="fs-6 m-0">Enter First Geometry</h3>
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">Please enter the first geometry to test:</p>
+                                    <div class="row">
+                                        <div class="col">
+                                            <label for="instability-first-alpha" class="form-label">Alpha (α)</label>
+                                            <input type="number" class="form-control" id="instability-first-alpha" 
+                                                   min="70" max="120" step="5" value="90">
+                                            <small class="text-muted">Range: 70-120° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="instability-first-beta" class="form-label">Beta (β)</label>
+                                            <input type="number" class="form-control" id="instability-first-beta" 
+                                                   min="90" max="140" step="5" value="110">
+                                            <small class="text-muted">Range: 90-140° (steps of 5°)</small>
+                                        </div>
+                                        <div class="col">
+                                            <label for="instability-first-gamma" class="form-label">Gamma (γ)</label>
+                                            <input type="number" class="form-control" id="instability-first-gamma" 
+                                                   min="-12" max="12" step="3" value="0">
+                                            <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex gap-2 mt-3">
+                                        <button class="btn btn-primary" id="instability-set-first-geometry-btn">Set First Geometry</button>
+                                        <button class="btn btn-secondary" id="instability-cancel-first-geometry-btn">Cancel</button>
                                     </div>
                                 </div>
                             </div>
@@ -1320,7 +1361,7 @@
                                                         
                             <!-- Trial History Card -->
                             <div class="card">
-                                <div class="card-header bg-danger text-white">
+                                <div class="card-header bg-info text-white">
                                     <h3 class="fs-6 m-0">Instability Optimization History</h3>
                                 </div>
                                 <div class="card-body p-2">
