@@ -31,9 +31,9 @@ crutch_params_boundaries = [
 
 # Defines the step size for each parameter for discrete optimization
 CRUTCH_PARAM_STEPS = {
-    'alpha': 1,
-    'beta': 1,
-    'gamma': 1
+    'alpha': 5,
+    'beta': 5,
+    'gamma': 3
 }
 
 # Parameters for the Gaussian Process kernel

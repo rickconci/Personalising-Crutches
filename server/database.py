@@ -10,13 +10,17 @@ db = SQLAlchemy()
 class Participant(db.Model):
     """Represents a participant in the study."""
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(80), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     characteristics = db.Column(db.JSON, nullable=True)
     
     trials = db.relationship('Trial', backref='participant', lazy=True)
 
     def __repr__(self):
-        return f'<Participant {self.user_id}>'
+        return f'<Participant {self.name}>'
+    
+    @property
+    def full_name(self):
+        return self.name
 
 class Geometry(db.Model):
     """Represents a predefined crutch geometry."""
@@ -35,15 +39,27 @@ class Trial(db.Model):
     """Represents a single experimental trial."""
     id = db.Column(db.Integer, primary_key=True)
     participant_id = db.Column(db.Integer, db.ForeignKey('participant.id'), nullable=False)
-    geometry_id = db.Column(db.Integer, db.ForeignKey('geometry.id'), nullable=False)
+    geometry_id = db.Column(db.Integer, db.ForeignKey('geometry.id'), nullable=True)  # Nullable for BO trials
+    
+    # BO trial parameters (for trials without predefined geometries)
+    alpha = db.Column(db.Float, nullable=True)
+    beta = db.Column(db.Float, nullable=True)
+    gamma = db.Column(db.Float, nullable=True)
     
     timestamp = db.Column(db.DateTime, server_default=db.func.now())
     raw_data_path = db.Column(db.String(255), nullable=True)
-    source = db.Column(db.String(20), nullable=False, server_default='systematic')
+    source = db.Column(db.String(20), nullable=False, server_default='grid_search')
     
     # Store featurized and survey data as JSON
     processed_features = db.Column(db.JSON, nullable=True)
     survey_responses = db.Column(db.JSON, nullable=True)
+    steps = db.Column(db.JSON, nullable=True) # To store the final list of step timestamps
+    
+    # Metabolic cost field for effort optimization
+    metabolic_cost = db.Column(db.Float, nullable=True)
+    
+    # Soft delete flag
+    deleted = db.Column(db.DateTime, nullable=True)  # Timestamp when deleted, NULL if not deleted
     
     def __repr__(self):
         return f'<Trial {self.id} for Participant {self.participant_id}>'
@@ -57,28 +73,33 @@ def create_and_populate_database(app):
         if Geometry.query.first() is None:
             print("Populating geometries...")
             
-            # Add a control geometry
-            control_geometry = Geometry(name="Control", alpha=15.0, beta=12.0, gamma=10.0)
-            db.session.add(control_geometry)
-
-            # Add 26 other placeholder geometries
-            # This creates a simple grid for demonstration
-            alphas = np.linspace(10, 20, 3)
-            betas = np.linspace(8, 16, 3)
-            gammas = np.linspace(5, 15, 3)
+            # --- Define Geometries ---
+            # Gamma (γ) values: -9, 0, 9
+            # Beta (β) values: 110, 125, 140
+            # Alpha (α) values: 80, 95, 110
             
-            count = 1
-            for a in alphas:
-                for b in betas:
-                    for g in gammas:
-                        # Simple check to avoid duplicating control, assuming it's one of the generated values
-                        if count > 26: break
-                        if abs(a - 15.0) < 0.1 and abs(b - 12.0) < 0.1 and abs(g - 10.0) < 0.1:
+            # Add a "Control" geometry first, using the new median values
+            control_geometry = Geometry(name='Control', alpha=95, beta=125, gamma=0)
+            db.session.add(control_geometry)
+            
+            geometries = []
+            gammas = [-9, 0, 9]
+            betas = [110, 125, 140]
+            alphas = [80, 95, 110]
+            
+            g_number = 1
+            for gamma in gammas:
+                for beta in betas:
+                    for alpha in alphas:
+                        # Skip the one that matches the control
+                        if alpha == 95 and beta == 125 and gamma == 0:
                             continue
-
-                        geom = Geometry(name=f"G{count}", alpha=round(a, 1), beta=round(b, 1), gamma=round(g, 1))
+                        
+                        geom_name = f'G{g_number}'
+                        geom = Geometry(name=geom_name, alpha=alpha, beta=beta, gamma=gamma)
                         db.session.add(geom)
-                        count += 1
+                        geometries.append(geom)
+                        g_number += 1
             
             db.session.commit()
             print("Geometries populated.")

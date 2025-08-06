@@ -196,7 +196,7 @@ def compute_cycle_variance(df: pd.DataFrame, step_times: np.ndarray) -> float:
     Compute the variance of cycle durations (step intervals).
     """
     if len(step_times) < 2:
-        return float('nan')
+        return 0.0  # Return 0 instead of NaN for JSON compatibility
     
     durations = np.diff(step_times)
     return np.var(durations)
@@ -206,7 +206,7 @@ def compute_mean_y_rms_per_cycle(df: pd.DataFrame, step_times: np.ndarray, retur
     Compute the mean RMS of Y-axis acceleration per cycle.
     """
     if len(step_times) < 2:
-        return float('nan') if not return_all else ([], [])
+        return 0.0 if not return_all else ([], [])  # Return 0 instead of NaN for JSON compatibility
     
     times = df['timestamp'].values
     y = df['acc_y_data'].values
@@ -227,4 +227,4 @@ def compute_mean_y_rms_per_cycle(df: pd.DataFrame, step_times: np.ndarray, retur
     if return_all:
         return cycle_rms, cycle_starts
         
-    return float(np.mean(cycle_rms)) if cycle_rms else float('nan') 
+    return float(np.mean(cycle_rms)) if cycle_rms else 0.0  # Return 0 instead of NaN for JSON compatibility 
