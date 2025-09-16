@@ -1,8 +1,0 @@
-metric,value,unit
-participant,lukejul15pilot,
-alpha,70,°
-beta,90,°
-gamma,-9,°
-cycle_duration_loss,0.00099530895691609,s
-total_loss,0.9953089569160901,
-n_steps,43,

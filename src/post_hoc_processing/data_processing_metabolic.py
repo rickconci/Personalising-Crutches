@@ -184,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "stem",
         nargs="?",                              
-        default="/Users/riccardoconci/Library/Mobile Documents/com~apple~CloudDocs/HQ_2024/Projects/2024_Harvard_AIM/Research/OPMO/Personalising-Crutches/2025.06.18/20250618_LukeChung_COSMED",
+        default="/Users/riccardoconci/Local_documents/Personalising-Crutches/data/2025.08.05/20250805 Katie Ho (CPET Breath by Breath)_20250805090046 C1",
         help="Input filename without “.xlsx”"
     )
     parser.add_argument(
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--weight",
         type=float,
-        default=77.0,
+        default=58.0,
         help="Subject weight in kg (used to normalize metabolic cost)"
     )
     parser.add_argument(
