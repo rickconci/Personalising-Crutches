@@ -546,6 +546,10 @@ def update_trial(trial_id):
         trial.steps = data.get('steps', trial.steps)
         trial.survey_responses = data.get('surveyResponses', trial.survey_responses)
         
+        # Update metabolic cost if provided
+        if 'metabolic_cost' in data:
+            trial.metabolic_cost = data['metabolic_cost']
+        
         db.session.commit()
         db.session.refresh(trial)
         
@@ -612,11 +616,21 @@ def download_participant_data(participant_id):
             surveys_df = summary_df['survey_responses'].apply(pd.Series)
             summary_df = pd.concat([summary_df.drop('survey_responses', axis=1), surveys_df], axis=1)
 
-        # Reorder columns, putting the new UI trial number first
+        # Add participant characteristics to each row
+        characteristics = participant.characteristics or {}
+        for key, value in characteristics.items():
+            summary_df[f'participant_{key}'] = value
+
+        # Reorder columns, putting participant info and UI trial number first
         final_columns = [
             'ui_trial_number', 'geometry_name', 'alpha', 'beta', 'gamma', 'timestamp',
-            'instability_loss', 'step_count', 'sus_score', 'nrs_score', 'tlx_score', 'source', 'id'
+            'instability_loss', 'step_count', 'sus_score', 'nrs_score', 'tlx_score', 'metabolic_cost', 'source', 'id'
         ]
+        
+        # Add participant characteristics columns at the beginning
+        participant_cols = [col for col in summary_df.columns if col.startswith('participant_')]
+        final_columns = participant_cols + final_columns
+        
         final_columns = [col for col in final_columns if col in summary_df.columns]
         summary_df = summary_df[final_columns]
         summary_df.rename(columns={'id': 'trial_db_id'}, inplace=True)

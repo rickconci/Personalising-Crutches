@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function () {
         editStepList: document.getElementById('edit-step-list'),
         editStepCount: document.getElementById('edit-step-count'),
         editInstabilityLossValue: document.getElementById('edit-instability-loss-value'),
+        editMetabolicCost: document.getElementById('edit-metabolic-cost'),
         resaveTrialBtn: document.getElementById('resave-trial-btn'),
         editPlotsArea: document.getElementById('edit-plots-area'),
     };
@@ -651,6 +652,10 @@ document.addEventListener('DOMContentLoaded', function () {
             const data = await apiRequest(`/api/participants/${participantId}`);
             appState.currentParticipant = data.participant;
             displayParticipantDetails(data.participant);
+            
+            // Reload trials data to ensure we have the latest updates
+            appState.trials = await apiRequest('/api/trials');
+            
             renderParticipantTrialsTable(participantId);
             renderRemainingGeometries(data.all_geometries);
             renderInstabilityPlot(data.instability_plot_data);
@@ -845,7 +850,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 <td>${t.survey_responses?.sus_score !== undefined ? Number(t.survey_responses.sus_score).toFixed(2) : '-'}</td>
                 <td>${t.survey_responses?.nrs_score !== undefined ? t.survey_responses.nrs_score : '-'}</td>
                 <td>${t.survey_responses?.tlx_score !== undefined ? Number(t.survey_responses.tlx_score).toFixed(2) : '-'}</td>
-                <td>${t.survey_responses?.metabolic_cost !== undefined ? Number(t.survey_responses.metabolic_cost).toFixed(2) : '-'}</td>
+                <td>${t.metabolic_cost !== undefined && t.metabolic_cost !== null ? Number(t.metabolic_cost).toFixed(2) : '-'}</td>
                 <td class="text-center">
                     <button class="btn btn-sm btn-outline-danger delete-trial-btn" data-trial-id="${t.id}" data-geometry-id="${t.geometry_id}">
                         🗑️
@@ -873,6 +878,9 @@ document.addEventListener('DOMContentLoaded', function () {
             trialState.metrics = results.metrics;
             trialState.steps = results.steps.sort((a, b) => a - b);
             trialState.rawData = results.processed_data;
+
+            // Load current metabolic cost value
+            systematic.editMetabolicCost.value = trialInfo.metabolic_cost || '';
 
             // Use a new function to render plots and steps inside the modal
             await renderEditView(results);
@@ -1180,6 +1188,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const payload = {
             metrics: trialState.metrics,
             steps: trialState.steps,
+            metabolic_cost: systematic.editMetabolicCost.value || null,
             // For now, survey responses are not editable in this view, so we don't send them
         };
 
@@ -1641,7 +1650,7 @@ document.addEventListener('DOMContentLoaded', function () {
             surveyResponses[`tlx_q${index + 1}`] = value;
             tlxScore += value;
         });
-        surveyResponses['tlx_score'] = (tlxScore / 120) * 100; // Scale to 0-100
+        surveyResponses['tlx_score'] = tlxScore; // Already on 0-100 scale (5 questions × 20 points each)
 
         // --- Metabolic Cost Input ---
         const metabolicCostInput = systematic.trialForm.querySelector('#metabolic-cost-input');
