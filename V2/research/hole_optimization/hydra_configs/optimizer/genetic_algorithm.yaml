@@ -1,0 +1,16 @@
+# @package _global_
+optimizer_type: "genetic_algorithm"
+
+genetic_algorithm:
+  population_size: 100
+  num_generations: 500
+  crossover_rate: 0.8
+  mutation_rate: 0.1
+
+  # Selection
+  selection_method: "tournament" # tournament, roulette, rank
+  tournament_size: 3
+
+  # Multi-objective
+  use_nsga2: true
+  crowding_distance_weight: 0.1
