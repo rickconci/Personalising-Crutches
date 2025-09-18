@@ -21,6 +21,7 @@ from .base import BaseOptimizer, OptimizationResult, OptimizationMetrics
 from ..config import CrutchConstraints, OptimizationObjectives, DifferentiableConfig
 from ..geometry import HoleLayout, Geometry
 from ..logging_system import OptimizationLogger, LoggingMode, LoggingInterest, create_logger_for_optimizer
+from ..gpu_config import GPUConfig, setup_gpu_for_optimization
 
 
 class DifferentiableOptimizer(BaseOptimizer):
@@ -32,12 +33,21 @@ class DifferentiableOptimizer(BaseOptimizer):
         objectives: OptimizationObjectives,
         config: DifferentiableConfig,
         random_seed: int = 42,
-        logger: Optional[OptimizationLogger] = None
+        logger: Optional[OptimizationLogger] = None,
+        use_gpu: bool = True,
+        gpu_memory_fraction: float = 0.8
     ):
         """Initialize differentiable optimizer."""
         super().__init__(constraints, objectives, random_seed)
         self.config = config
         self.key = random.PRNGKey(random_seed)
+        
+        # Setup GPU configuration
+        self.gpu_config = setup_gpu_for_optimization(
+            use_gpu=use_gpu,
+            gpu_memory_fraction=gpu_memory_fraction,
+            verbose=True
+        )
         
         # Setup logging
         if logger is None:
@@ -124,7 +134,7 @@ class DifferentiableOptimizer(BaseOptimizer):
                 'Best': f'{best_objective:.4f}',
                 'Vocab': f'{forward_info["vocabulary_score"]:.2f}',
                 'Truss': f'{forward_info["truss_complexity"]:.2f}',
-                'Grad': f'{float(jnp.linalg.norm(grads)):.3f}'
+                'Grad': f'{jnp.linalg.norm(grads):.3f}'
             })
             
             # Detailed, mechanics-focused logging every N iterations
@@ -139,17 +149,17 @@ class DifferentiableOptimizer(BaseOptimizer):
                 truss_info = forward_info.get('truss_info', {})
                 self.std_logger.info(f"  -> Truss Stats: Estimated Unique Trusses={truss_info.get('estimated_unique_count', 0):.2f}")
 
-                grad_norm = float(jnp.linalg.norm(grads))
-                param_norm = float(jnp.linalg.norm(params))
+                grad_norm = jnp.linalg.norm(grads)
+                param_norm = jnp.linalg.norm(params)
                 self.std_logger.info(f"  -> Gradients Norm: {grad_norm:.4f} | Params Norm: {param_norm:.4f}")
 
             # Comprehensive logging
             metrics = {
-                'objective': float(loss),
-                'improvement': float(improvement),
-                'best_objective': float(best_objective),
-                'gradient_norm': float(jnp.linalg.norm(grads)),
-                'parameter_norm': float(jnp.linalg.norm(params)),
+                'objective': loss,
+                'improvement': improvement,
+                'best_objective': best_objective,
+                'gradient_norm': jnp.linalg.norm(grads),
+                'parameter_norm': jnp.linalg.norm(params),
                 **forward_info.get('metrics', {})
             }
             
@@ -182,7 +192,7 @@ class DifferentiableOptimizer(BaseOptimizer):
         final_metrics = OptimizationMetrics(
             vocabulary_size=len(self.geometry_calculator.enumerate_geometries(best_layout)),
             num_unique_trusses=self._estimate_unique_trusses(best_layout),
-            objective_value=float(final_objective)
+            objective_value=final_objective
         )
         
         # Generate geometries
@@ -201,7 +211,7 @@ class DifferentiableOptimizer(BaseOptimizer):
             converged=improvement < self.config.convergence_threshold,
             metadata={
                 'config': self.config.__dict__,
-                'final_loss': float(final_objective),
+                'final_loss': final_objective,
                 'best_hole_layout': {
                     'handle': result.best_hole_layout.handle_holes,
                     'vertical': result.best_hole_layout.vertical_holes,
@@ -266,20 +276,20 @@ class DifferentiableOptimizer(BaseOptimizer):
             
             # Detailed forward pass information
             forward_pass_info = {
-                'vocabulary_score': float(vocab_score),
-                'truss_complexity': float(truss_complexity),
-                'l2_penalty': float(l2_penalty),
-                'raw_objective': float(objective),
-                'total_loss': float(total_loss),
+                'vocabulary_score': vocab_score,
+                'truss_complexity': truss_complexity,
+                'l2_penalty': l2_penalty,
+                'raw_objective': objective,
+                'total_loss': total_loss,
                 'hole_counts': {
                     'handle': len(layout['handle']),
                     'vertical': len(layout['vertical']),
                     'forearm': len(layout['forearm'])
                 },
                 'metrics': {
-                    'vocabulary_score': float(vocab_score),
-                    'truss_complexity': float(truss_complexity),
-                    'l2_penalty': float(l2_penalty)
+                    'vocabulary_score': vocab_score,
+                    'truss_complexity': truss_complexity,
+                    'l2_penalty': l2_penalty
                 },
                 **vocab_info,
                 **truss_info
@@ -408,14 +418,19 @@ class DifferentiableOptimizer(BaseOptimizer):
 
         alphas, betas, gammas = jnp.meshgrid(alpha_samples, beta_samples, gamma_samples, indexing='ij')
         
+        # Flatten the arrays for vmap
+        alphas_flat = alphas.flatten()
+        betas_flat = betas.flatten()
+        gammas_flat = gammas.flatten()
+        
         # Create a mask for valid combinations
-        valid_mask = (alphas + betas) >= 180.0 if self.constraints.require_alpha_beta_sum_ge_180 else jnp.ones_like(alphas, dtype=bool)
+        valid_mask = (alphas_flat + betas_flat) >= 180.0 if self.constraints.require_alpha_beta_sum_ge_180 else jnp.ones_like(alphas_flat, dtype=bool)
         
         # Get the vectorized realizability checker
         vmapped_checker = self._get_realizability_checker()
 
         # Run the checker on all combinations at once
-        all_realizabilities = vmapped_checker(layout_dict, alphas, betas, gammas, self.constraints, self.config)
+        all_realizabilities = vmapped_checker(layout_dict, alphas_flat, betas_flat, gammas_flat, self.constraints, self.config)
         
         # Apply the mask to ignore invalid combinations
         achievable_score = jnp.sum(all_realizabilities * valid_mask)
@@ -437,7 +452,6 @@ class DifferentiableOptimizer(BaseOptimizer):
         return achievable_score
     
     @staticmethod
-    @jax.jit
     def _soft_geometry_realizability(layout_dict: Dict[str, jnp.ndarray], alpha: float, beta: float, gamma: float, constraints: CrutchConstraints, config: DifferentiableConfig) -> float:
         """JIT-compatible, static method to check realizability for a single geometry."""
         handle_holes = layout_dict['handle']
@@ -446,44 +460,79 @@ class DifferentiableOptimizer(BaseOptimizer):
 
         vertical_pivot = constraints.vertical_pivot_length
         forearm_pivot = vertical_pivot + gamma
+
+        # Simplified approach: sample a few combinations instead of all combinations
+        # This avoids the complex meshgrid shape issues
         
-        # Log the geometry being tested (only occasionally to avoid spam)
-        if hasattr(self, '_log_counter'):
-            self._log_counter += 1
-        else:
-            self._log_counter = 0
+        # Sample a few handle-vertical combinations for T1 and T2
+        max_combinations = min(5, len(handle_holes), len(vertical_holes))
+        t1_feasibilities = []
+        t2_feasibilities = []
+        
+        for i in range(max_combinations):
+            h_pos = handle_holes[i % len(handle_holes)]
+            v_pos = vertical_holes[i % len(vertical_holes)]
             
-        if self._log_counter % 100 == 0:  # Log every 100th geometry
-            self.std_logger.info(f"🔍 Testing geometry: α={alpha:.1f}°, β={beta:.1f}°, γ={gamma:.1f}cm")
-
-        # --- T1 Feasibility ---
-        handle_for_t1 = handle_holes[handle_holes < vertical_pivot]
-        # To avoid nested loops in JAX, we can create mesh grids
-        v_grid_t1, h_grid_t1 = jnp.meshgrid(vertical_holes, handle_for_t1)
-        r1_t1, r2_t1 = v_grid_t1, jnp.abs(vertical_pivot - h_grid_t1)
-        t1_lengths = jnp.sqrt(r1_t1**2 + r2_t1**2 - 2 * r1_t1 * r2_t1 * jnp.cos(jnp.deg2rad(180.0 - alpha)))
-        t1_feasibilities = self._calculate_truss_feasibility(t1_lengths, r1_t1, r2_t1, config)
-        max_f1 = jnp.max(t1_feasibilities) if t1_feasibilities.size > 0 else 0.0
-
-        # --- T2 Feasibility ---
-        handle_for_t2 = handle_holes[handle_holes > vertical_pivot]
-        v_grid_t2, h_grid_t2 = jnp.meshgrid(vertical_holes, handle_for_t2)
-        r1_t2, r2_t2 = v_grid_t2, jnp.abs(h_grid_t2 - vertical_pivot)
-        t2_lengths = jnp.sqrt(r1_t2**2 + r2_t2**2 - 2 * r1_t2 * r2_t2 * jnp.cos(jnp.deg2rad(alpha)))
-        t2_feasibilities = self._calculate_truss_feasibility(t2_lengths, r1_t2, r2_t2, config)
-        max_f2 = jnp.max(t2_feasibilities) if t2_feasibilities.size > 0 else 0.0
+            # T1: handle < vertical_pivot
+            t1_mask = h_pos < vertical_pivot
+            r1_t1, r2_t1 = v_pos, jnp.abs(vertical_pivot - h_pos)
+            t1_length = jnp.sqrt(r1_t1**2 + r2_t1**2 - 2*r1_t1*r2_t1*jnp.cos(jnp.deg2rad(180.0 - alpha)))
+            t1_feas = DifferentiableOptimizer._calculate_truss_feasibility_single(t1_length, r1_t1, r2_t1, config)
+            t1_feasibilities.append(t1_feas * t1_mask)
+            
+            # T2: handle > vertical_pivot
+            t2_mask = h_pos > vertical_pivot
+            r1_t2, r2_t2 = v_pos, jnp.abs(h_pos - vertical_pivot)
+            t2_length = jnp.sqrt(r1_t2**2 + r2_t2**2 - 2*r1_t2*r2_t2*jnp.cos(jnp.deg2rad(alpha)))
+            t2_feas = DifferentiableOptimizer._calculate_truss_feasibility_single(t2_length, r1_t2, r2_t2, config)
+            t2_feasibilities.append(t2_feas * t2_mask)
         
-        # --- T3 Feasibility ---
-        handle_for_t3 = handle_holes[handle_holes < forearm_pivot]
-        f_grid_t3, h_grid_t3 = jnp.meshgrid(forearm_holes, handle_for_t3)
-        r1_t3, r2_t3 = f_grid_t3, jnp.abs(forearm_pivot - h_grid_t3)
-        t3_lengths = jnp.sqrt(r1_t3**2 + r2_t3**2 - 2 * r1_t3 * r2_t3 * jnp.cos(jnp.deg2rad(180.0 - beta)))
-        t3_feasibilities = self._calculate_truss_feasibility(t3_lengths, r1_t3, r2_t3, config)
-        max_f3 = jnp.max(t3_feasibilities) if t3_feasibilities.size > 0 else 0.0
+        # Sample a few handle-forearm combinations for T3
+        t3_feasibilities = []
+        max_combinations_t3 = min(5, len(handle_holes), len(forearm_holes))
+        
+        for i in range(max_combinations_t3):
+            h_pos = handle_holes[i % len(handle_holes)]
+            f_pos = forearm_holes[i % len(forearm_holes)]
+            
+            # T3: handle < forearm_pivot
+            t3_mask = h_pos < forearm_pivot
+            r1_t3, r2_t3 = f_pos, jnp.abs(forearm_pivot - h_pos)
+            t3_length = jnp.sqrt(r1_t3**2 + r2_t3**2 - 2*r1_t3*r2_t3*jnp.cos(jnp.deg2rad(180.0 - beta)))
+            t3_feas = DifferentiableOptimizer._calculate_truss_feasibility_single(t3_length, r1_t3, r2_t3, config)
+            t3_feasibilities.append(t3_feas * t3_mask)
+        
+        # Get maximum feasibilities
+        max_f1 = jnp.max(jnp.array(t1_feasibilities)) if t1_feasibilities else 0.0
+        max_f2 = jnp.max(jnp.array(t2_feasibilities)) if t2_feasibilities else 0.0
+        max_f3 = jnp.max(jnp.array(t3_feasibilities)) if t3_feasibilities else 0.0
 
         # A geometry is realizable only if we can find good candidates for T1, T2, AND T3.
         return max_f1 * max_f2 * max_f3
     
+    @staticmethod
+    def _calculate_truss_feasibility_single(truss_length: float, r1: float, r2: float, config: DifferentiableConfig) -> float:
+        """Calculates a feasibility score for a single truss based on its length and the internal angles it forms."""
+        # 1. Length feasibility with preference for longer trusses
+        is_in_range = (truss_length >= config.truss_length_min) & (truss_length <= config.truss_length_max)
+        
+        # Normalize length to [0, 1] within the feasible range to score longer trusses higher
+        normalized_length = (truss_length - config.truss_length_min) / (config.truss_length_max - config.truss_length_min + 1e-6)
+        length_feasibility = is_in_range * normalized_length
+
+        # 2. Angle feasibility (45-degree preference)
+        # Law of cosines to find internal angles
+        cos_angle1 = (truss_length**2 + r1**2 - r2**2) / (2 * truss_length * r1 + 1e-6)
+        cos_angle2 = (truss_length**2 + r2**2 - r1**2) / (2 * truss_length * r2 + 1e-6)
+        angle1 = jnp.rad2deg(jnp.arccos(jnp.clip(cos_angle1, -1.0, 1.0)))
+        angle2 = jnp.rad2deg(jnp.arccos(jnp.clip(cos_angle2, -1.0, 1.0)))
+
+        # Soft penalty for deviating from 45 degrees
+        angle_error = jnp.abs(angle1 - 45.0) + jnp.abs(angle2 - 45.0)
+        angle_feasibility = jax.nn.sigmoid(-(angle_error - 10.0) * 0.1) # Penalize if total error > 10 degrees
+
+        return length_feasibility * angle_feasibility
+
     @staticmethod
     def _calculate_truss_feasibility(truss_length: jnp.ndarray, r1: jnp.ndarray, r2: jnp.ndarray, config: DifferentiableConfig) -> jnp.ndarray:
         """Calculates a feasibility score for a single truss based on its length and the internal angles it forms."""
@@ -510,15 +559,20 @@ class DifferentiableOptimizer(BaseOptimizer):
     def _sample_hole_combinations(self, handle_holes: jnp.ndarray, vertical_holes: jnp.ndarray, 
                                  forearm_holes: jnp.ndarray, n_samples: int) -> List[Tuple[float, float, float]]:
         """Sample hole combinations uniformly."""
+        # Generate random indices using JAX
+        key = self.key
+        h_indices = jax.random.randint(key, (n_samples,), 0, len(handle_holes))
+        key, _ = jax.random.split(key)
+        v_indices = jax.random.randint(key, (n_samples,), 0, len(vertical_holes))
+        key, _ = jax.random.split(key)
+        f_indices = jax.random.randint(key, (n_samples,), 0, len(forearm_holes))
+        
         combinations = []
-        for _ in range(n_samples):
-            h_idx = int(jnp.random.uniform() * len(handle_holes))
-            v_idx = int(jnp.random.uniform() * len(vertical_holes))
-            f_idx = int(jnp.random.uniform() * len(forearm_holes))
+        for i in range(n_samples):
             combinations.append((
-                float(handle_holes[h_idx]),
-                float(vertical_holes[v_idx]),
-                float(forearm_holes[f_idx])
+                handle_holes[h_indices[i]],
+                vertical_holes[v_indices[i]],
+                forearm_holes[f_indices[i]]
             ))
         return combinations
     
@@ -560,19 +614,19 @@ class DifferentiableOptimizer(BaseOptimizer):
                         t2 = jnp.sqrt(r1**2 + r2**2 - 2*r1*r2*jnp.cos(jnp.deg2rad(alpha)))
                         sample_trusses.append(t2)
         
-        if not sample_trusses:
+        sample_trusses = jnp.array(sample_trusses)
+        if sample_trusses.size == 0:
             unique_count = 100.0  # High penalty for no valid trusses
         else:
-            sample_trusses = jnp.array(sample_trusses)
             unique_count = self._differentiable_unique_count(sample_trusses)
         
         if return_info:
             info = {
                 'truss_info': {
-                    'total_truss_samples': len(sample_trusses) if sample_trusses else 0,
-                    'mean_truss_length': float(jnp.mean(sample_trusses)) if sample_trusses else 0.0,
-                    'estimated_unique_count': float(unique_count),
-                    'sample_truss_lengths': [float(t) for t in sample_trusses[:10]] if sample_trusses else []
+                    'total_truss_samples': sample_trusses.size,
+                    'mean_truss_length': jnp.mean(sample_trusses) if sample_trusses.size > 0 else 0.0,
+                    'estimated_unique_count': unique_count,
+                    'sample_truss_lengths': sample_trusses[:10] if sample_trusses.size > 0 else jnp.array([]),
                 }
             }
             return unique_count, info

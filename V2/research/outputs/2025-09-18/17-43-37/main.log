@@ -1,0 +1,80 @@
+[2025-09-18 17:43:37,306][__main__][INFO] - 🚀 Starting Hydra-powered hole optimization
+[2025-09-18 17:43:37,306][__main__][INFO] - 📁 Working directory: /Users/riccardoconci/Local_documents/Personalising-Crutches/V2/research
+[2025-09-18 17:43:37,308][__main__][INFO] - ⚙️ Configuration:
+optimizer_type: differentiable
+differentiable:
+  learning_rate: 0.01
+  max_iterations: 1000
+  convergence_threshold: 1.0e-06
+  temperature: 0.1
+  temperature_schedule: constant
+  hidden_dims:
+  - 64
+  - 32
+  activation: relu
+  l2_reg: 0.0001
+  dropout_rate: 0.1
+  vocab_angle_samples: 20
+  vocab_hole_samples: 100
+  truss_angle_samples: 20
+  truss_hole_samples: 50
+  truss_length_min: 3.0
+  truss_length_max: 15.0
+random_seed: 42
+verbose: true
+use_initial_layout: false
+create_plots: true
+constraints:
+  vertical_length: 20.0
+  handle_length: 38.0
+  forearm_length: 17.0
+  vertical_pivot_length: 19.0
+  forearm_pivot_length: 19.0
+  min_hole_distance: 2.0
+  hole_margin: 0.5
+  alpha_min: 85.0
+  alpha_max: 115.0
+  beta_min: 95.0
+  beta_max: 140.0
+  gamma_min: -9.0
+  gamma_max: 9.0
+  require_alpha_beta_sum_ge_180: true
+objectives:
+  vocabulary_weight: 1.0
+  truss_complexity_weight: 0.5
+  manufacturability_weight: 0.1
+  robustness_weight: 0.1
+  max_unique_trusses: 6
+  min_vocabulary_size: 50
+  length_tolerance: 0.25
+  angle_tolerance: 1.0
+cross_validation_folds: 5
+test_split: 0.2
+
+[2025-09-18 17:43:37,308][__main__][INFO] - 🔧 Using optimizer: differentiable
+[2025-09-18 17:43:37,321][jax._src.xla_bridge][INFO] - Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: dlopen(libtpu.so, 0x0001): tried: 'libtpu.so' (no such file), '/System/Volumes/Preboot/Cryptexes/OSlibtpu.so' (no such file), '/Users/riccardoconci/miniforge3/envs/OPMO2/lib/python3.12/site-packages/jaxlib/../../../libtpu.so' (no such file), '/Users/riccardoconci/miniforge3/envs/OPMO2/bin/../lib/libtpu.so' (no such file), '/usr/lib/libtpu.so' (no such file, not in dyld cache), 'libtpu.so' (no such file), '/usr/local/lib/libtpu.so' (no such file), '/usr/lib/libtpu.so' (no such file, not in dyld cache)
+[2025-09-18 17:43:37,363][root][WARNING] - wandb not available, disabling wandb logging
+[2025-09-18 17:43:37,633][__main__][INFO] - 🎯 Running optimization...
+[2025-09-18 17:43:38,189][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🚀 Starting optimization with 38 parameters
+[2025-09-18 17:43:38,189][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 📊 Max holes: Handle=19, Vertical=10, Forearm=9
+[2025-09-18 17:43:38,189][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - best params raw: [0.1302882  0.18439665 0.14344254 0.20157045 0.21664487 0.2806092
+ 0.34295806 0.34858936 0.44671643 0.49754125 0.5238557  0.5692074
+ 0.698915   0.6885556  0.74280447 0.75218916 0.76285267 0.8780193
+ 0.87797856 0.12161533 0.21825208 0.22069408 0.3479767  0.44560048
+ 0.45808896 0.541682   0.69913805 0.8095134  0.8111305  0.08590527
+ 0.13162556 0.21824808 0.41549993 0.4807753  0.6101516  0.7083607
+ 0.7562549  0.90300953]
+[2025-09-18 17:43:38,207][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🔄 Iteration 1/1000
+[2025-09-18 17:43:38,208][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 📊 Computing objective function...
+[2025-09-18 17:43:38,208][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🎯 Starting objective function computation...
+[2025-09-18 17:43:38,210][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🔄 Converting parameters to hole layout...
+[2025-09-18 17:43:38,309][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 📈 Computing vocabulary score...
+[2025-09-18 17:43:38,309][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🔍 Computing vocabulary score...
+[2025-09-18 17:43:39,697][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🔧 Computing truss complexity...
+[2025-09-18 17:43:39,697][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🔧 Computing truss complexity...
+[2025-09-18 17:43:39,697][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 📊 Hole counts: Handle=19, Vertical=10, Forearm=9
+[2025-09-18 17:43:39,697][hole_optimization.optimizers.differentiable.DifferentiableOptimizer][INFO] - 🎯 Sampling 20 α × 10 γ × 50 hole combinations = 10000 total
+[2025-09-18 17:44:45,049][__main__][ERROR] - ❌ Optimization failed: Abstract tracer value encountered where concrete value is expected: traced array with shape float32[]
+The problem arose with the `float` function. If trying to convert the data type of a value, try using `x.astype(float)` or `jnp.array(x, float)` instead.
+
+See https://docs.jax.dev/en/latest/errors.html#jax.errors.ConcretizationTypeError

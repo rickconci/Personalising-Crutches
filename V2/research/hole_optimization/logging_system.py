@@ -317,12 +317,20 @@ class OptimizationLogger:
         forward_file = self.output_dir / f"forward_pass_iter_{iteration:06d}.json"
         with open(forward_file, 'w') as f:
             # Convert JAX arrays to lists for JSON serialization
-            serializable_info = {}
-            for key, value in forward_info.items():
-                if isinstance(value, jnp.ndarray):
-                    serializable_info[key] = value.tolist()
+            def make_serializable(obj):
+                """Recursively convert JAX arrays and other non-serializable objects to JSON-serializable types."""
+                if isinstance(obj, jnp.ndarray):
+                    return obj.tolist()
+                elif isinstance(obj, dict):
+                    return {k: make_serializable(v) for k, v in obj.items()}
+                elif isinstance(obj, (list, tuple)):
+                    return [make_serializable(item) for item in obj]
+                elif hasattr(obj, 'item'):  # Handle scalar JAX arrays
+                    return obj.item()
                 else:
-                    serializable_info[key] = value
+                    return obj
+            
+            serializable_info = make_serializable(forward_info)
             json.dump(serializable_info, f, indent=2)
     
     def _update_live_plots(self, iteration: int):
