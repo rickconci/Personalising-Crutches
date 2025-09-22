@@ -34,7 +34,7 @@ class DifferentiableOptimizer(BaseOptimizer):
         config: DifferentiableConfig,
         random_seed: int = 42,
         logger: Optional[OptimizationLogger] = None,
-        use_gpu: bool = True,
+        use_gpu: bool = False,
         gpu_memory_fraction: float = 0.8
     ):
         """Initialize differentiable optimizer."""
@@ -213,9 +213,9 @@ class DifferentiableOptimizer(BaseOptimizer):
                 'config': self.config.__dict__,
                 'final_loss': final_objective,
                 'best_hole_layout': {
-                    'handle': result.best_hole_layout.handle_holes,
-                    'vertical': result.best_hole_layout.vertical_holes,
-                    'forearm': result.best_hole_layout.forearm_holes
+                    'handle': result.best_hole_layout.handle,
+                    'vertical': result.best_hole_layout.vertical,
+                    'forearm': result.best_hole_layout.forearm
                 }
             }
         )
@@ -226,9 +226,9 @@ class DifferentiableOptimizer(BaseOptimizer):
         self.std_logger.info(f"Vocabulary Size: {result.best_metrics.vocabulary_size}")
         self.std_logger.info(f"Unique Trusses: {self._estimate_unique_trusses(result.best_hole_layout)}")
         self.std_logger.info("Final Hole Layout:")
-        self.std_logger.info(f"  Handle: {[round(h, 2) for h in result.best_hole_layout.handle_holes]}")
-        self.std_logger.info(f"  Vertical: {[round(v, 2) for v in result.best_hole_layout.vertical_holes]}")
-        self.std_logger.info(f"  Forearm: {[round(f, 2) for f in result.best_hole_layout.forearm_holes]}")
+        self.std_logger.info(f"  Handle: {[round(h, 2) for h in result.best_hole_layout.handle]}")
+        self.std_logger.info(f"  Vertical: {[round(v, 2) for v in result.best_hole_layout.vertical]}")
+        self.std_logger.info(f"  Forearm: {[round(f, 2) for f in result.best_hole_layout.forearm]}")
         
         # Log final results
         self.logger.log_final_results(result)
@@ -315,13 +315,60 @@ class DifferentiableOptimizer(BaseOptimizer):
         return objective + l2_penalty
     
     def _initialize_params(self) -> jnp.ndarray:
-        """Initialize optimization parameters."""
+        """Initialize optimization parameters with evenly spaced holes."""
+        if self.config.use_uniform_initialization:
+            # Create uniform hole layout first
+            from ..geometry import create_uniform_holes
+            uniform_layout = create_uniform_holes(self.constraints)
+            
+            # Convert to parameters (this ensures proper spacing)
+            params = self._layout_to_params(uniform_layout)
+            
+            # Add small random perturbations if configured
+            if self.config.initialization_noise > 0:
+                self.key, *subkeys = random.split(self.key, 4)
+                handle_noise = random.normal(subkeys[0], (self.max_handle_holes,)) * self.config.initialization_noise
+                vertical_noise = random.normal(subkeys[1], (self.max_vertical_holes,)) * self.config.initialization_noise
+                forearm_noise = random.normal(subkeys[2], (self.max_forearm_holes,)) * self.config.initialization_noise
+                
+                # Apply perturbations while maintaining constraints
+                handle_params = jnp.clip(params[:self.max_handle_holes] + handle_noise, 0.0, 1.0)
+                vertical_params = jnp.clip(params[self.max_handle_holes:self.max_handle_holes + self.max_vertical_holes] + vertical_noise, 0.0, 1.0)
+                forearm_params = jnp.clip(params[self.max_handle_holes + self.max_vertical_holes:] + forearm_noise, 0.0, 1.0)
+                params = jnp.concatenate([handle_params, vertical_params, forearm_params])
+            
+            # Log the uniform parameters for verification
+            self.std_logger.info(f"📍 Uniform hole layout created:")
+            self.std_logger.info(f"  Handle holes (cm): {uniform_layout.handle}")
+            self.std_logger.info(f"  Vertical holes (cm): {uniform_layout.vertical}")
+            self.std_logger.info(f"  Forearm holes (cm): {uniform_layout.forearm}")
+            self.std_logger.info(f"📍 Normalized parameters [0,1]: {params}")
+            
+            # Verify spacing is uniform
+            if len(uniform_layout.handle) > 1:
+                handle_spacing = [round(float(uniform_layout.handle[i+1] - uniform_layout.handle[i]), 1) for i in range(len(uniform_layout.handle)-1)]
+                self.std_logger.info(f"  Handle spacing (cm): {handle_spacing}")
+            if len(uniform_layout.vertical) > 1:
+                vertical_spacing = [round(float(uniform_layout.vertical[i+1] - uniform_layout.vertical[i]), 1) for i in range(len(uniform_layout.vertical)-1)]
+                self.std_logger.info(f"  Vertical spacing (cm): {vertical_spacing}")
+            if len(uniform_layout.forearm) > 1:
+                forearm_spacing = [round(float(uniform_layout.forearm[i+1] - uniform_layout.forearm[i]), 1) for i in range(len(uniform_layout.forearm)-1)]
+                self.std_logger.info(f"  Forearm spacing (cm): {forearm_spacing}")
+            
+            return params
+        else:
+            # Fallback to random initialization
+            self.std_logger.info("📍 Using random initialization (not uniform)")
+            return self._random_initialize_params()
+    
+    def _random_initialize_params(self) -> jnp.ndarray:
+        """Random initialization fallback."""
         # Initialize with reasonable hole distributions
         handle_init = jnp.linspace(0.1, 0.9, self.max_handle_holes)
         vertical_init = jnp.linspace(0.1, 0.9, self.max_vertical_holes)
         forearm_init = jnp.linspace(0.1, 0.9, self.max_forearm_holes)
         
-        # Add small random perturbations
+        # Add random perturbations
         self.key, *subkeys = random.split(self.key, 4)
         handle_noise = random.normal(subkeys[0], (self.max_handle_holes,)) * 0.05
         vertical_noise = random.normal(subkeys[1], (self.max_vertical_holes,)) * 0.05
@@ -337,11 +384,11 @@ class DifferentiableOptimizer(BaseOptimizer):
     
     def _layout_to_params(self, layout: HoleLayout) -> jnp.ndarray:
         """Convert hole layout to parameter vector."""
-        def normalize_positions(positions: List[float], max_length: float) -> jnp.ndarray:
+        def normalize_positions(positions: jnp.ndarray, max_length: float) -> jnp.ndarray:
             """Normalize positions to [0, 1] range."""
-            if not positions:
+            if positions.size == 0:
                 return jnp.zeros(0)
-            return jnp.array(positions) / max_length
+            return positions / max_length
         
         def pad_or_truncate(arr: jnp.ndarray, target_size: int) -> jnp.ndarray:
             """Pad with zeros or truncate to target size."""
@@ -352,15 +399,15 @@ class DifferentiableOptimizer(BaseOptimizer):
         
         # Normalize and pad each rod type
         handle_params = pad_or_truncate(
-            normalize_positions(layout.handle_holes, self.constraints.handle_length), 
+            normalize_positions(layout.handle, self.constraints.handle_length), 
             self.max_handle_holes
         )
         vertical_params = pad_or_truncate(
-            normalize_positions(layout.vertical_holes, self.constraints.vertical_length),
+            normalize_positions(layout.vertical, self.constraints.vertical_length),
             self.max_vertical_holes
         )
         forearm_params = pad_or_truncate(
-            normalize_positions(layout.forearm_holes, self.constraints.forearm_length),
+            normalize_positions(layout.forearm, self.constraints.forearm_length),
             self.max_forearm_holes
         )
         
@@ -385,9 +432,9 @@ class DifferentiableOptimizer(BaseOptimizer):
             return sorted(valid_positions)
         
         return HoleLayout(
-            handle_holes=extract_valid_holes(handle_params, self.constraints.handle_length, self.constraints.hole_margin),
-            vertical_holes=extract_valid_holes(vertical_params, self.constraints.vertical_length, self.constraints.hole_margin),
-            forearm_holes=extract_valid_holes(forearm_params, self.constraints.forearm_length, self.constraints.hole_margin)
+            handle=extract_valid_holes(handle_params, self.constraints.handle_length, self.constraints.hole_margin),
+            vertical=extract_valid_holes(vertical_params, self.constraints.vertical_length, self.constraints.hole_margin),
+            forearm=extract_valid_holes(forearm_params, self.constraints.forearm_length, self.constraints.hole_margin)
         )
     
     def _params_to_layout_differentiable(self, params: jnp.ndarray) -> Dict[str, jnp.ndarray]:
@@ -414,7 +461,7 @@ class DifferentiableOptimizer(BaseOptimizer):
         
         alpha_samples = jnp.linspace(self.constraints.alpha_min, self.constraints.alpha_max, self.config.vocab_angle_samples)
         beta_samples = jnp.linspace(self.constraints.beta_min, self.constraints.beta_max, self.config.vocab_angle_samples)
-        gamma_samples = jnp.linspace(self.constraints.gamma_min, self.constraints.gamma_max, self.config.vocab_angle_samples // 2)
+        gamma_samples = jnp.linspace(self.constraints.gamma_min, self.constraints.gamma_max, self.config.vocab_gamma_samples)
 
         alphas, betas, gammas = jnp.meshgrid(alpha_samples, beta_samples, gamma_samples, indexing='ij')
         
@@ -590,29 +637,38 @@ class DifferentiableOptimizer(BaseOptimizer):
         sample_trusses = []
         
         alpha_samples = jnp.linspace(self.constraints.alpha_min, self.constraints.alpha_max, self.config.truss_angle_samples)
-        gamma_samples = jnp.linspace(self.constraints.gamma_min, self.constraints.gamma_max, self.config.truss_angle_samples // 2)
+        beta_samples = jnp.linspace(self.constraints.beta_min, self.constraints.beta_max, self.config.truss_angle_samples)
+        gamma_samples = jnp.linspace(self.constraints.gamma_min, self.constraints.gamma_max, self.config.truss_gamma_samples)
         
-        total_combinations = len(alpha_samples) * len(gamma_samples) * self.config.truss_hole_samples
-        self.std_logger.info(f"🎯 Sampling {len(alpha_samples)} α × {len(gamma_samples)} γ × {self.config.truss_hole_samples} hole combinations = {total_combinations} total")
+        total_combinations = len(alpha_samples) * len(beta_samples) * len(gamma_samples) * self.config.truss_hole_samples
+        self.std_logger.info(f"🎯 Sampling {len(alpha_samples)} α × {len(beta_samples)} β × {len(gamma_samples)} γ × {self.config.truss_hole_samples} hole combinations = {total_combinations} total")
         
         for alpha in alpha_samples:
-            for gamma in gamma_samples:
-                # Uniformly sample hole combinations
-                combinations = self._sample_hole_combinations(handle_holes, vertical_holes, forearm_holes, self.config.truss_hole_samples)
-                
-                vertical_pivot = self.constraints.vertical_pivot_length
-                
-                for h_pos, v_pos, f_pos in combinations:
-                    # Truss calculations (handle-vertical connection)
-                    if h_pos < vertical_pivot:
-                        r1, r2 = v_pos, abs(vertical_pivot - h_pos)
-                        t1 = jnp.sqrt(r1**2 + r2**2 - 2*r1*r2*jnp.cos(jnp.deg2rad(180.0 - alpha)))
-                        sample_trusses.append(t1)
+            for beta in beta_samples:
+                for gamma in gamma_samples:
+                    # Uniformly sample hole combinations
+                    combinations = self._sample_hole_combinations(handle_holes, vertical_holes, forearm_holes, self.config.truss_hole_samples)
                     
-                    if h_pos > vertical_pivot:
-                        r1, r2 = v_pos, abs(h_pos - vertical_pivot)
-                        t2 = jnp.sqrt(r1**2 + r2**2 - 2*r1*r2*jnp.cos(jnp.deg2rad(alpha)))
-                        sample_trusses.append(t2)
+                    vertical_pivot = self.constraints.vertical_pivot_length
+                    forearm_pivot = vertical_pivot + gamma
+                    
+                    for h_pos, v_pos, f_pos in combinations:
+                        # Truss calculations (handle-vertical connection)
+                        if h_pos < vertical_pivot:
+                            r1, r2 = v_pos, abs(vertical_pivot - h_pos)
+                            t1 = jnp.sqrt(r1**2 + r2**2 - 2*r1*r2*jnp.cos(jnp.deg2rad(180.0 - alpha)))
+                            sample_trusses.append(t1)
+                        
+                        if h_pos > vertical_pivot:
+                            r1, r2 = v_pos, abs(h_pos - vertical_pivot)
+                            t2 = jnp.sqrt(r1**2 + r2**2 - 2*r1*r2*jnp.cos(jnp.deg2rad(alpha)))
+                            sample_trusses.append(t2)
+                        
+                        # Truss 3 (handle-forearm connection)
+                        if h_pos < forearm_pivot:
+                            r1_t3, r2_t3 = f_pos, abs(forearm_pivot - h_pos)
+                            t3 = jnp.sqrt(r1_t3**2 + r2_t3**2 - 2*r1_t3*r2_t3*jnp.cos(jnp.deg2rad(180.0 - beta)))
+                            sample_trusses.append(t3)
         
         sample_trusses = jnp.array(sample_trusses)
         if sample_trusses.size == 0:
@@ -664,8 +720,8 @@ class DifferentiableOptimizer(BaseOptimizer):
                 forearm_pivot = vertical_pivot + gamma
                 
                 # Sample a few hole combinations
-                for h_pos in layout.handle_holes[:3]:
-                    for v_pos in layout.vertical_holes[:3]:
+                for h_pos in layout.handle[:3]:
+                    for v_pos in layout.vertical[:3]:
                         # Truss 1/2
                         if h_pos < vertical_pivot:
                             r1, r2 = v_pos, abs(vertical_pivot - h_pos)
@@ -679,7 +735,7 @@ class DifferentiableOptimizer(BaseOptimizer):
                         # Truss 3 (we need a beta sample for this)
                         for beta in np.linspace(self.constraints.beta_min, self.constraints.beta_max, 10):
                              if h_pos < forearm_pivot:
-                                for f_pos in layout.forearm_holes[:3]:
+                                for f_pos in layout.forearm[:3]:
                                     r1_t3, r2_t3 = f_pos, abs(forearm_pivot - h_pos)
                                     t3 = np.sqrt(r1_t3**2 + r2_t3**2 - 2 * r1_t3 * r2_t3 * np.cos(np.deg2rad(180.0 - beta)))
                                     trusses.add(round(t3, 1))

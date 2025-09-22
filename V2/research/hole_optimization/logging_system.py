@@ -377,7 +377,6 @@ class OptimizationLogger:
                 self.live_axes[1, 0].grid(True)
             
             plt.tight_layout()
-            plt.pause(0.01)  # Brief pause to update display
             
             # Save plot
             plot_file = self.output_dir / f"live_plot_iter_{iteration:06d}.png"

@@ -55,8 +55,12 @@ class GPUConfig:
             return False
             
         if not self.use_gpu:
-            self.logger.info("GPU usage disabled by configuration.")
-            return False
+            self.logger.info("GPU usage disabled by configuration. Using CPU.")
+            # Force CPU usage
+            os.environ['CUDA_VISIBLE_DEVICES'] = ''
+            os.environ['JAX_PLATFORM_NAME'] = 'cpu'
+            self._backend = 'cpu'
+            return True
             
         try:
             # Set environment variables for GPU configuration

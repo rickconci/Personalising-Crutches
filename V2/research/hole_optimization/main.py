@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Optional
 import time
 
+# Set matplotlib backend to non-interactive before importing matplotlib
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+
 import hydra
 from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig, OmegaConf

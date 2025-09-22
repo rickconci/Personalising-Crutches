@@ -3,6 +3,10 @@
 from __future__ import annotations
 from typing import List, Tuple, Optional
 from pathlib import Path
+
+# Set matplotlib backend to non-interactive
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns

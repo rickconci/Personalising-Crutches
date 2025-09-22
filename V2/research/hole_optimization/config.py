@@ -150,14 +150,20 @@ class DifferentiableConfig(BaseModel):
     dropout_rate: float = Field(default=0.1, ge=0, le=1, description="Dropout rate")
     
     # Sampling parameters for differentiable functions
-    vocab_angle_samples: int = Field(default=20, gt=0, description="Number of (α, β) angle combinations to sample for vocabulary")
-    vocab_hole_samples: int = Field(default=50, gt=0, description="Number of hole combinations per angle for vocabulary")
-    truss_angle_samples: int = Field(default=20, gt=0, description="Number of α angles to sample for truss complexity")
-    truss_hole_samples: int = Field(default=50, gt=0, description="Number of hole combinations per angle for truss complexity")
+    vocab_angle_samples: int = Field(default=10, gt=0, description="Number of (α, β) angle combinations to sample for vocabulary")
+    vocab_gamma_samples: int = Field(default=5, gt=0, description="Number of γ angles to sample for vocabulary")
+    vocab_hole_samples: int = Field(default=10, gt=0, description="Number of hole combinations per angle for vocabulary")
+    truss_angle_samples: int = Field(default=10, gt=0, description="Number of α angles to sample for truss complexity")
+    truss_gamma_samples: int = Field(default=5, gt=0, description="Number of γ angles to sample for truss complexity")
+    truss_hole_samples: int = Field(default=10, gt=0, description="Number of hole combinations per angle for truss complexity")
     
     # Feasibility parameters
     truss_length_min: float = Field(default=3.0, gt=0, description="Minimum feasible truss length (cm)")
     truss_length_max: float = Field(default=15.0, gt=0, description="Maximum feasible truss length (cm)")
+    
+    # Initialization parameters
+    use_uniform_initialization: bool = Field(default=True, description="Use uniform hole spacing for initialization")
+    initialization_noise: float = Field(default=0.0, ge=0, le=0.1, description="Random noise added to uniform initialization (0.0 = perfectly uniform)")
     
     class Config:
         frozen = True  # Equivalent to @dataclass(frozen=True)
