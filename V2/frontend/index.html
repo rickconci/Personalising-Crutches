@@ -35,452 +35,469 @@
         <!-- ==  GRID SEARCH SCREEN                                                               == -->
         <!-- ======================================================================================= -->
         <div id="systematic-screen" class="screen container-fluid py-3 d-none">
-
-            <!-- Full-width Trial Runner Bar -->
-            <div class="row mb-3">
-                <div class="col-12 d-none" id="trial-runner-col">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 id="trial-runner-title" class="mb-0">Run Trial: Control</h5>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-outline-danger btn-sm" id="discard-trial-btn"
-                                    style="display: none;">
-                                    <i class="fas fa-trash"></i> Discard Trial
+            <!-- Wide participant selection section -->
+            <div class="col-12 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>1. Select Participant</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <select id="participant-select" class="form-select mb-2">
+                                    <option selected disabled>Choose...</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-outline-primary w-100 mb-2" data-bs-toggle="modal"
+                                    data-bs-target="#create-participant-modal">
+                                    <i class="fas fa-user-plus"></i> Create New Participant
                                 </button>
-                                <button type="button" class="btn btn-outline-secondary btn-sm"
-                                    id="close-trial-runner-btn">
-                                    <i class="fas fa-times"></i> Close
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-outline-danger w-100" id="delete-participant-btn"
+                                    disabled>
+                                    <i class="fas fa-user-minus"></i> Delete Participant
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="button" class="btn btn-outline-info w-100" id="download-data-btn"
+                                    disabled>
+                                    <i class="fas fa-download"></i> Download All Data
                                 </button>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <form id="systematic-trial-form">
-                                <input type="hidden" id="systematic-participant-id">
-                                <input type="hidden" id="systematic-geometry-id">
-
-                                <!-- Horizontal Control Bar -->
-                                <div class="d-flex flex-wrap align-items-center justify-content-start gap-3 mb-3">
-                                    <div class="btn-group" role="group">
-                                        <button type="button" class="btn btn-primary" id="connect-device-btn"><i
-                                                class="fas fa-bluetooth-b"></i> Connect</button>
-                                    </div>
-                                    <div id="device-status" class="alert alert-secondary p-2 mb-0"
-                                        style="min-width: 200px;">Status: Disconnected</div>
-
-                                    <div class="ms-auto d-flex align-items-center gap-3">
-                                        <div id="stopwatch" class="fs-2 fw-bold text-monospace">00:00.0</div>
-                                        <button type="button" class="btn btn-success btn-lg" id="start-stop-btn"
-                                            disabled><i class="fas fa-play"></i> Start</button>
-                                    </div>
-                                </div>
-
-                                <!-- Analysis Results & Survey (appear below controls) -->
-                                <div class="row">
-                                    <div class="col-md-8">
-                                        <div id="plots-area" class="d-none">
-                                            <div class="row">
-                                                <div class="col-12">
-                                                    <div id="force-plot-div" class="plotly-chart-container mb-2"></div>
-                                                </div>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-12">
-                                                    <div id="hist-plot-div" class="plotly-chart-container mb-2"></div>
-                                                </div>
-                                            </div>
-                                            <!-- Step Interaction Table -->
-                                            <div id="step-interaction-area" class="d-none">
-                                                <h6>Detected Steps (<span id="step-count">0</span>)</h6>
-                                                <div class="table-responsive" style="max-height: 150px;">
-                                                    <table class="table table-sm table-striped">
-                                                        <tbody id="step-list">
-                                                            <!-- Step items will be injected here -->
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div id="metrics-and-survey-area" class="d-none border-start ps-3">
-                                            <h6 class="text-center">Calculated Metrics</h6>
-                                            <div class="row">
-                                                <div class="col-md-12">
-                                                    <div class="metric-box">
-                                                        <h6 class="text-muted">Instability Loss (Variance, s²)</h6>
-                                                        <p id="instability-loss-value" class="h4 mb-0">-</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <hr>
-
-                                            <div id="survey-sections">
-                                                <!-- Section 1: Usability (Adapted SUS) -->
-                                                <div class="card mb-3">
-                                                    <div class="card-header">
-                                                        <h6 class="mb-0">Usability Survey (Adapted SUS)</h6>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <p class="text-muted small">Scale: 1 (Strongly Disagree) to 5
-                                                            (Strongly Agree)</p>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">1. I think that I would like
-                                                                to use the crutches frequently.</label>
-                                                            <select class="form-select form-select-sm sus-question"
-                                                                data-positive="true">
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3" selected>3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">2. I thought the crutches
-                                                                were easy to use.</label>
-                                                            <select class="form-select form-select-sm sus-question"
-                                                                data-positive="true">
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3" selected>3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">3. I think that I would need
-                                                                the support of a technical person to be able to use
-                                                                these crutches.</label>
-                                                            <select class="form-select form-select-sm sus-question"
-                                                                data-positive="false">
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3" selected>3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">4. I would imagine that most
-                                                                people would learn to use these crutches very
-                                                                quickly.</label>
-                                                            <select class="form-select form-select-sm sus-question"
-                                                                data-positive="true">
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3" selected>3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">5. I felt very confident
-                                                                using the crutches.</label>
-                                                            <select class="form-select form-select-sm sus-question"
-                                                                data-positive="true">
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3" selected>3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label class="form-label small">6. I needed to learn a lot
-                                                                of things before I could get going with these
-                                                                crutches.</label>
-                                                            <select class="form-select form-select-sm sus-question"
-                                                                data-positive="false">
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3" selected>3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Section 2: Pain (NRS) -->
-                                                <div class="card mb-3">
-                                                    <div class="card-header">
-                                                        <h6 class="mb-0">Pain Scale (NRS)</h6>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <p class="text-muted small">On a scale from 0 (No pain) to 10
-                                                            (Worst possible pain), how would you rate your pain?</p>
-                                                        <select id="nrs-score" class="form-select">
-                                                            <option value="0">0 - No pain</option>
-                                                            <option value="1">1</option>
-                                                            <option value="2">2</option>
-                                                            <option value="3">3</option>
-                                                            <option value="4">4</option>
-                                                            <option value="5" selected>5 - Moderate pain</option>
-                                                            <option value="6">6</option>
-                                                            <option value="7">7</option>
-                                                            <option value="8">8</option>
-                                                            <option value="9">9</option>
-                                                            <option value="10">10 - Worst possible pain</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Section 3: Workload (NASA-TLX) -->
-                                                <div class="card mb-3">
-                                                    <div class="card-header">
-                                                        <h6 class="mb-0">Workload Survey (NASA-TLX)</h6>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <p class="text-muted small">Scale: 0 (Very Low) to 20 (Very
-                                                            High)</p>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">Mental Demand: How mentally
-                                                                demanding was the task?</label>
-                                                            <select class="form-select form-select-sm tlx-question">
-                                                                <option value="0">0</option>
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3">3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                                <option value="6">6</option>
-                                                                <option value="7">7</option>
-                                                                <option value="8">8</option>
-                                                                <option value="9">9</option>
-                                                                <option value="10">10</option>
-                                                                <option value="11">11</option>
-                                                                <option value="12">12</option>
-                                                                <option value="13">13</option>
-                                                                <option value="14">14</option>
-                                                                <option value="15">15</option>
-                                                                <option value="16">16</option>
-                                                                <option value="17">17</option>
-                                                                <option value="18">18</option>
-                                                                <option value="19">19</option>
-                                                                <option value="20">20</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">Physical Demand: How
-                                                                physically demanding was the task?</label>
-                                                            <select class="form-select form-select-sm tlx-question">
-                                                                <option value="0">0</option>
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3">3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                                <option value="6">6</option>
-                                                                <option value="7">7</option>
-                                                                <option value="8">8</option>
-                                                                <option value="9">9</option>
-                                                                <option value="10">10</option>
-                                                                <option value="11">11</option>
-                                                                <option value="12">12</option>
-                                                                <option value="13">13</option>
-                                                                <option value="14">14</option>
-                                                                <option value="15">15</option>
-                                                                <option value="16">16</option>
-                                                                <option value="17">17</option>
-                                                                <option value="18">18</option>
-                                                                <option value="19">19</option>
-                                                                <option value="20">20</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">Performance: How successful
-                                                                were you in accomplishing what you were asked to
-                                                                do?</label>
-                                                            <select class="form-select form-select-sm tlx-question">
-                                                                <option value="0">0</option>
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3">3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                                <option value="6">6</option>
-                                                                <option value="7">7</option>
-                                                                <option value="8">8</option>
-                                                                <option value="9">9</option>
-                                                                <option value="10">10</option>
-                                                                <option value="11">11</option>
-                                                                <option value="12">12</option>
-                                                                <option value="13">13</option>
-                                                                <option value="14">14</option>
-                                                                <option value="15">15</option>
-                                                                <option value="16">16</option>
-                                                                <option value="17">17</option>
-                                                                <option value="18">18</option>
-                                                                <option value="19">19</option>
-                                                                <option value="20">20</option>
-                                                            </select>
-                                                        </div>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">Effort: How hard did you
-                                                                have to work to accomplish your level of
-                                                                performance?</label>
-                                                            <select class="form-select form-select-sm tlx-question">
-                                                                <option value="0">0</option>
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3">3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                                <option value="6">6</option>
-                                                                <option value="7">7</option>
-                                                                <option value="8">8</option>
-                                                                <option value="9">9</option>
-                                                                <option value="10">10</option>
-                                                                <option value="11">11</option>
-                                                                <option value="12">12</option>
-                                                                <option value="13">13</option>
-                                                                <option value="14">14</option>
-                                                                <option value="15">15</option>
-                                                                <option value="16">16</option>
-                                                                <option value="17">17</option>
-                                                                <option value="18">18</option>
-                                                                <option value="19">19</option>
-                                                                <option value="20">20</option>
-                                                            </select>
-                                                        </div>
-                                                        <div>
-                                                            <label class="form-label small">Frustration: How insecure,
-                                                                discouraged, irritated, stressed, and annoyed were
-                                                                you?</label>
-                                                            <select class="form-select form-select-sm tlx-question">
-                                                                <option value="0">0</option>
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3">3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5">5</option>
-                                                                <option value="6">6</option>
-                                                                <option value="7">7</option>
-                                                                <option value="8">8</option>
-                                                                <option value="9">9</option>
-                                                                <option value="10">10</option>
-                                                                <option value="11">11</option>
-                                                                <option value="12">12</option>
-                                                                <option value="13">13</option>
-                                                                <option value="14">14</option>
-                                                                <option value="15">15</option>
-                                                                <option value="16">16</option>
-                                                                <option value="17">17</option>
-                                                                <option value="18">18</option>
-                                                                <option value="19">19</option>
-                                                                <option value="20">20</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Section 4: Metabolic Cost Input -->
-                                                <div class="card">
-                                                    <div class="card-header">
-                                                        <h6 class="mb-0">Metabolic Cost Input</h6>
-                                                    </div>
-                                                    <div class="card-body">
-                                                        <p class="text-muted small">Enter the metabolic cost value from
-                                                            the separate analysis computer</p>
-                                                        <div class="mb-3">
-                                                            <label class="form-label small">Metabolic Cost
-                                                                (ml/kg/min)</label>
-                                                            <input type="number" class="form-control"
-                                                                id="metabolic-cost-input" step="0.1"
-                                                                placeholder="Enter metabolic cost value">
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="mt-3">
-                                                <button type="submit" class="btn btn-primary w-100">Save Trial
-                                                    Results</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </form>
+                    </div>
+                    <div class="card-footer d-none" id="participant-details-footer">
+                        <h6 class="mb-2 text-muted">Participant Details</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <tbody id="participant-details-table">
+                                    <!-- Details will be injected here -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Participant Selection & Geometries -->
-            <div class="row">
-                <!-- Wide participant selection section -->
-                <div class="col-12 mb-3">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>1. Select Participant</h5>
+            <!-- Grid search tables -->
+            <div class="col-12 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>2. Select Trial</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Geometry Grid -->
+                        <div id="grid-search-tables" class="mb-4">
+                            <div class="text-center text-muted">Select a participant to see available
+                                trials.</div>
                         </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-4">
-                                    <select id="participant-select" class="form-select mb-2">
-                                        <option selected disabled>Choose...</option>
-                                    </select>
+
+                        <hr class="my-4">
+
+                        <!-- Trial Runner (appears after a trial is selected) -->
+                        <div id="trial-runner-section" class="mt-4 d-none">
+                            <div class="card bg-light border-primary">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h5 id="trial-runner-title" class="mb-0">Ready to Run Trial</h5>
+                                    <button type="button" class="btn-close" id="close-trial-runner-btn"
+                                        aria-label="Close"></button>
                                 </div>
-                                <div class="col-md-4">
-                                    <button type="button" class="btn btn-outline-primary w-100 mb-2"
-                                        data-bs-toggle="modal" data-bs-target="#create-participant-modal">
-                                        <i class="fas fa-user-plus"></i> Create New Participant
-                                    </button>
+                                <div class="card-body">
+                                    <div class="d-flex flex-wrap align-items-center justify-content-start gap-3 mb-3">
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-primary" id="connect-device-btn">
+                                                <i class="fas fa-bluetooth-b"></i> Connect Device
+                                            </button>
+                                        </div>
+                                        <div id="device-status" class="alert alert-secondary p-2 mb-0">
+                                            Status: Disconnected
+                                        </div>
+
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="test-mode-checkbox">
+                                            <label class="form-check-label" for="test-mode-checkbox">
+                                                Test Mode (No Device)
+                                            </label>
+                                        </div>
+
+                                        <div class="ms-auto d-flex align-items-center gap-3">
+                                            <div id="stopwatch" class="fs-2 fw-bold">00:00.0</div>
+                                            <button type="button" class="btn btn-success btn-lg" id="start-stop-btn"
+                                                disabled>
+                                                <i class="fas fa-play"></i> Start
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Analysis Results & Survey (appear after trial stops) -->
+                                    <div class="row mt-3">
+                                        <div class="col-md-8">
+                                            <div id="plots-area" class="d-none">
+                                                <div class="row">
+                                                    <div class="col-12">
+                                                        <div id="force-plot-div" class="plotly-chart-container mb-2">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <!-- Step Interaction Table -->
+                                                <div id="step-interaction-area" class="d-none">
+                                                    <h6>Detected Steps (<span id="step-count">0</span>)</h6>
+                                                    <p class="small text-muted">Click on the plot to add
+                                                        steps, or
+                                                        use the delete buttons below to remove incorrect
+                                                        steps.</p>
+                                                    <div class="table-responsive" style="max-height: 200px;">
+                                                        <table class="table table-sm table-striped">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Step #</th>
+                                                                    <th>Time</th>
+                                                                    <th>Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody id="step-list">
+                                                                <!-- Step items will be injected here -->
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div id="metrics-and-survey-area" class="d-none border-start ps-3">
+                                                <h6 class="text-center">Calculated Metrics</h6>
+                                                <div class="row">
+                                                    <div class="col-md-12">
+                                                        <div class="metric-box">
+                                                            <h6 class="text-muted">Instability Loss
+                                                                (Variance, s²)
+                                                            </h6>
+                                                            <p id="instability-loss-value" class="h4 mb-0">-
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <hr>
+
+                                                <div id="survey-sections">
+                                                    <!-- Section 1: Usability (Adapted SUS) -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Usability Survey (Adapted SUS)</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <p class="text-muted small">Scale: 1 (Strongly Disagree) to
+                                                                5
+                                                                (Strongly Agree)</p>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">1. I think that I would
+                                                                    like
+                                                                    to use the crutches frequently.</label>
+                                                                <select class="form-select form-select-sm sus-question"
+                                                                    data-positive="true">
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3" selected>3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">2. I thought the
+                                                                    crutches
+                                                                    were easy to use.</label>
+                                                                <select class="form-select form-select-sm sus-question"
+                                                                    data-positive="true">
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3" selected>3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">3. I think that I would
+                                                                    need
+                                                                    the support of a technical person to be able to use
+                                                                    these crutches.</label>
+                                                                <select class="form-select form-select-sm sus-question"
+                                                                    data-positive="false">
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3" selected>3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">4. I would imagine that
+                                                                    most
+                                                                    people would learn to use these crutches very
+                                                                    quickly.</label>
+                                                                <select class="form-select form-select-sm sus-question"
+                                                                    data-positive="true">
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3" selected>3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">5. I felt very confident
+                                                                    using the crutches.</label>
+                                                                <select class="form-select form-select-sm sus-question"
+                                                                    data-positive="true">
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3" selected>3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <label class="form-label small">6. I needed to learn a
+                                                                    lot
+                                                                    of things before I could get going with these
+                                                                    crutches.</label>
+                                                                <select class="form-select form-select-sm sus-question"
+                                                                    data-positive="false">
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3" selected>3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Section 2: Pain (NRS) -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Pain Scale (NRS)</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <p class="text-muted small">On a scale from 0 (No pain) to
+                                                                10
+                                                                (Worst possible pain), how would you rate your pain?</p>
+                                                            <select id="nrs-score" class="form-select">
+                                                                <option value="0">0 - No pain</option>
+                                                                <option value="1">1</option>
+                                                                <option value="2">2</option>
+                                                                <option value="3">3</option>
+                                                                <option value="4">4</option>
+                                                                <option value="5" selected>5 - Moderate pain</option>
+                                                                <option value="6">6</option>
+                                                                <option value="7">7</option>
+                                                                <option value="8">8</option>
+                                                                <option value="9">9</option>
+                                                                <option value="10">10 - Worst possible pain</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Section 3: Workload (NASA-TLX) -->
+                                                    <div class="card mb-3">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Workload Survey (NASA-TLX)</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <p class="text-muted small">Scale: 0 (Very Low) to 20 (Very
+                                                                High)</p>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">Mental Demand: How
+                                                                    mentally
+                                                                    demanding was the task?</label>
+                                                                <select class="form-select form-select-sm tlx-question">
+                                                                    <option value="0">0</option>
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3">3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                    <option value="6">6</option>
+                                                                    <option value="7">7</option>
+                                                                    <option value="8">8</option>
+                                                                    <option value="9">9</option>
+                                                                    <option value="10" selected>10</option>
+                                                                    <option value="11">11</option>
+                                                                    <option value="12">12</option>
+                                                                    <option value="13">13</option>
+                                                                    <option value="14">14</option>
+                                                                    <option value="15">15</option>
+                                                                    <option value="16">16</option>
+                                                                    <option value="17">17</option>
+                                                                    <option value="18">18</option>
+                                                                    <option value="19">19</option>
+                                                                    <option value="20">20</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">Physical Demand: How
+                                                                    physically demanding was the task?</label>
+                                                                <select class="form-select form-select-sm tlx-question">
+                                                                    <option value="0">0</option>
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3">3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                    <option value="6">6</option>
+                                                                    <option value="7">7</option>
+                                                                    <option value="8">8</option>
+                                                                    <option value="9">9</option>
+                                                                    <option value="10" selected>10</option>
+                                                                    <option value="11">11</option>
+                                                                    <option value="12">12</option>
+                                                                    <option value="13">13</option>
+                                                                    <option value="14">14</option>
+                                                                    <option value="15">15</option>
+                                                                    <option value="16">16</option>
+                                                                    <option value="17">17</option>
+                                                                    <option value="18">18</option>
+                                                                    <option value="19">19</option>
+                                                                    <option value="20">20</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">Performance: How
+                                                                    successful
+                                                                    were you in accomplishing what you were asked to
+                                                                    do?</label>
+                                                                <select class="form-select form-select-sm tlx-question">
+                                                                    <option value="0">0</option>
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3">3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                    <option value="6">6</option>
+                                                                    <option value="7">7</option>
+                                                                    <option value="8">8</option>
+                                                                    <option value="9">9</option>
+                                                                    <option value="10" selected>10</option>
+                                                                    <option value="11">11</option>
+                                                                    <option value="12">12</option>
+                                                                    <option value="13">13</option>
+                                                                    <option value="14">14</option>
+                                                                    <option value="15">15</option>
+                                                                    <option value="16">16</option>
+                                                                    <option value="17">17</option>
+                                                                    <option value="18">18</option>
+                                                                    <option value="19">19</option>
+                                                                    <option value="20">20</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">Effort: How hard did you
+                                                                    have to work to accomplish your level of
+                                                                    performance?</label>
+                                                                <select class="form-select form-select-sm tlx-question">
+                                                                    <option value="0">0</option>
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3">3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                    <option value="6">6</option>
+                                                                    <option value="7">7</option>
+                                                                    <option value="8">8</option>
+                                                                    <option value="9">9</option>
+                                                                    <option value="10" selected>10</option>
+                                                                    <option value="11">11</option>
+                                                                    <option value="12">12</option>
+                                                                    <option value="13">13</option>
+                                                                    <option value="14">14</option>
+                                                                    <option value="15">15</option>
+                                                                    <option value="16">16</option>
+                                                                    <option value="17">17</option>
+                                                                    <option value="18">18</option>
+                                                                    <option value="19">19</option>
+                                                                    <option value="20">20</option>
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <label class="form-label small">Frustration: How
+                                                                    insecure,
+                                                                    discouraged, irritated, stressed, and annoyed were
+                                                                    you?</label>
+                                                                <select class="form-select form-select-sm tlx-question">
+                                                                    <option value="0">0</option>
+                                                                    <option value="1">1</option>
+                                                                    <option value="2">2</option>
+                                                                    <option value="3">3</option>
+                                                                    <option value="4">4</option>
+                                                                    <option value="5">5</option>
+                                                                    <option value="6">6</option>
+                                                                    <option value="7">7</option>
+                                                                    <option value="8">8</option>
+                                                                    <option value="9">9</option>
+                                                                    <option value="10" selected>10</option>
+                                                                    <option value="11">11</option>
+                                                                    <option value="12">12</option>
+                                                                    <option value="13">13</option>
+                                                                    <option value="14">14</option>
+                                                                    <option value="15">15</option>
+                                                                    <option value="16">16</option>
+                                                                    <option value="17">17</option>
+                                                                    <option value="18">18</option>
+                                                                    <option value="19">19</option>
+                                                                    <option value="20">20</option>
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Section 4: Metabolic Cost Input -->
+                                                    <div class="card">
+                                                        <div class="card-header">
+                                                            <h6 class="mb-0">Metabolic Cost Input</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <p class="text-muted small">Enter the metabolic cost value
+                                                                from
+                                                                the separate analysis computer</p>
+                                                            <div class="mb-3">
+                                                                <label class="form-label small">Metabolic Cost
+                                                                    (ml/kg/min)</label>
+                                                                <input type="number" class="form-control"
+                                                                    id="metabolic-cost-input" step="0.1"
+                                                                    placeholder="Enter metabolic cost value">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mt-3">
+                                                    <button type="button" class="btn btn-primary w-100"
+                                                        id="save-trial-btn">Save Trial
+                                                        Results</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <button type="button" class="btn btn-outline-danger w-100"
-                                        id="delete-participant-btn" disabled>
-                                        <i class="fas fa-user-minus"></i> Delete Participant
-                                    </button>
-                                </div>
-                                <div class="col-md-4">
-                                    <button type="button" class="btn btn-outline-info w-100" id="download-data-btn"
-                                        disabled>
-                                        <i class="fas fa-download"></i> Download All Data
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-footer d-none" id="participant-details-footer">
-                            <h6 class="mb-2 text-muted">Participant Details</h6>
-                            <div class="table-responsive">
-                                <table class="table table-sm table-bordered">
-                                    <tbody id="participant-details-table">
-                                        <!-- Details will be injected here -->
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Grid search tables -->
-                <div class="col-12 mb-3">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>2. Select Trial</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="grid-search-tables">
-                                <div class="text-center text-muted">Select a participant to see grid search trials.
-                                </div>
-                            </div>
-                        </div>
+            <!-- Instability 3D Plot -->
+            <div class="col-12 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Instability Landscape</h5>
                     </div>
-                </div>
-
-                <!-- Instability 3D Plot -->
-                <div class="col-12 mb-3">
-                    <div class="card">
-                        <div class="card-header">
-                            <h5>Instability Landscape</h5>
-                        </div>
-                        <div class="card-body">
-                            <div id="instability-plot-3d" class="plotly-chart-container" style="height: 500px;">
-                                <div class="text-center text-muted pt-5">Select a participant with completed trials to
-                                    view the 3D plot.</div>
-                            </div>
+                    <div class="card-body">
+                        <div id="instability-plot-3d" class="plotly-chart-container" style="height: 500px;">
+                            <div class="text-center text-muted pt-5">Select a participant with completed
+                                trials to
+                                view the 3D plot.</div>
                         </div>
                     </div>
                 </div>
@@ -615,10 +632,13 @@
                                                 <h5 class="card-title text-primary">
                                                     <i class="fas fa-play me-2"></i>Continue Optimization
                                                 </h5>
-                                                <p class="card-text">Load all previous NRS data (from Grid Search and
-                                                    Pain BO) into the optimization and suggest the next geometry based
+                                                <p class="card-text">Load all previous NRS data (from Grid
+                                                    Search and
+                                                    Pain BO) into the optimization and suggest the next geometry
+                                                    based
                                                     on all historical data.</p>
-                                                <button class="btn btn-primary" id="pain-continue-btn">Continue with
+                                                <button class="btn btn-primary" id="pain-continue-btn">Continue
+                                                    with
                                                     Existing Data</button>
                                             </div>
                                         </div>
@@ -629,8 +649,10 @@
                                                 <h5 class="card-title text-success">
                                                     <i class="fas fa-redo me-2"></i>Restart Optimization
                                                 </h5>
-                                                <p class="card-text">Start fresh optimization from the beginning. Input
-                                                    your starting geometry manually and ignore all previous data.</p>
+                                                <p class="card-text">Start fresh optimization from the
+                                                    beginning. Input
+                                                    your starting geometry manually and ignore all previous
+                                                    data.</p>
                                                 <button class="btn btn-success" id="pain-restart-btn">Start
                                                     Fresh</button>
                                             </div>
@@ -662,21 +684,24 @@
                                                 <div class="col">
                                                     <div class="metric-card">
                                                         <div class="metric-label">Alpha (α)</div>
-                                                        <div class="metric-value" id="pain-geometry-alpha">-</div>
+                                                        <div class="metric-value" id="pain-geometry-alpha">-
+                                                        </div>
                                                         <div class="metric-unit">degrees</div>
                                                     </div>
                                                 </div>
                                                 <div class="col">
                                                     <div class="metric-card">
                                                         <div class="metric-label">Beta (β)</div>
-                                                        <div class="metric-value" id="pain-geometry-beta">-</div>
+                                                        <div class="metric-value" id="pain-geometry-beta">-
+                                                        </div>
                                                         <div class="metric-unit">degrees</div>
                                                     </div>
                                                 </div>
                                                 <div class="col">
                                                     <div class="metric-card">
                                                         <div class="metric-label">Gamma (γ)</div>
-                                                        <div class="metric-value" id="pain-geometry-gamma">-</div>
+                                                        <div class="metric-value" id="pain-geometry-gamma">-
+                                                        </div>
                                                         <div class="metric-unit">degrees</div>
                                                     </div>
                                                 </div>
@@ -690,7 +715,8 @@
                                                 Geometry</button>
                                             <button class="btn btn-suggest-alternative"
                                                 id="pain-suggest-alternative-btn">Suggest Alternative</button>
-                                            <button class="btn btn-manual-loss" id="pain-manual-loss-btn">Assign Manual
+                                            <button class="btn btn-manual-loss" id="pain-manual-loss-btn">Assign
+                                                Manual
                                                 Loss</button>
                                         </div>
 
@@ -721,7 +747,8 @@
                                         <h3 class="fs-6 m-0">Pain Assessment (NRS)</h3>
                                     </div>
                                     <div class="card-body">
-                                        <p class="text-muted">After testing this geometry, rate your pain level:</p>
+                                        <p class="text-muted">After testing this geometry, rate your pain level:
+                                        </p>
                                         <div class="mb-3">
                                             <label for="pain-nrs-score" class="form-label">
                                                 Pain Level (0 = No pain, 10 = Worst possible pain)
@@ -737,7 +764,8 @@
                                             </div>
                                         </div>
                                         <div class="d-flex gap-2">
-                                            <button class="btn btn-success" id="pain-submit-score-btn">Submit Pain
+                                            <button class="btn btn-success" id="pain-submit-score-btn">Submit
+                                                Pain
                                                 Score</button>
                                             <button class="btn btn-secondary" id="pain-cancel-test-btn">Cancel</button>
                                         </div>
@@ -753,7 +781,8 @@
                                         <p class="text-muted">Please enter the first geometry to test:</p>
                                         <div class="row">
                                             <div class="col">
-                                                <label for="pain-first-alpha" class="form-label">Alpha (α)</label>
+                                                <label for="pain-first-alpha" class="form-label">Alpha
+                                                    (α)</label>
                                                 <input type="number" class="form-control" id="pain-first-alpha" min="70"
                                                     max="120" step="5" value="90">
                                                 <small class="text-muted">Range: 70-120° (steps of 5°)</small>
@@ -765,14 +794,17 @@
                                                 <small class="text-muted">Range: 90-140° (steps of 5°)</small>
                                             </div>
                                             <div class="col">
-                                                <label for="pain-first-gamma" class="form-label">Gamma (γ)</label>
+                                                <label for="pain-first-gamma" class="form-label">Gamma
+                                                    (γ)</label>
                                                 <input type="number" class="form-control" id="pain-first-gamma"
                                                     min="-12" max="12" step="3" value="0">
-                                                <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                                <small class="text-muted">Range: -12 to +12° (steps of
+                                                    3°)</small>
                                             </div>
                                         </div>
                                         <div class="d-flex gap-2 mt-3">
-                                            <button class="btn btn-primary" id="pain-set-first-geometry-btn">Set First
+                                            <button class="btn btn-primary" id="pain-set-first-geometry-btn">Set
+                                                First
                                                 Geometry</button>
                                             <button class="btn btn-secondary"
                                                 id="pain-cancel-first-geometry-btn">Cancel</button>
@@ -804,7 +836,8 @@
                                                 <label for="pain-alt-gamma" class="form-label">Gamma (γ)</label>
                                                 <input type="number" class="form-control" id="pain-alt-gamma" min="-12"
                                                     max="12" step="3" value="0">
-                                                <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
+                                                <small class="text-muted">Range: -12 to +12° (steps of
+                                                    3°)</small>
                                             </div>
                                         </div>
                                         <div class="d-flex gap-2 mt-3">
@@ -856,11 +889,13 @@
                                         <div class="progress-metrics">
                                             <div class="progress-metric">
                                                 <div class="progress-metric-label">Best Pain Score</div>
-                                                <div class="progress-metric-value best" id="pain-best-score">-</div>
+                                                <div class="progress-metric-value best" id="pain-best-score">-
+                                                </div>
                                             </div>
                                             <div class="progress-metric">
                                                 <div class="progress-metric-label">Total Trials</div>
-                                                <div class="progress-metric-value" id="pain-total-trials">0</div>
+                                                <div class="progress-metric-value" id="pain-total-trials">0
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -922,7 +957,8 @@
                                         <div><label class="form-label small">Pain</label><input type="range"
                                                 class="form-range" id="bo-pain" min="0" max="6" value="3"></div>
                                         <div><label class="form-label small">Effort</label><input type="range"
-                                                class="form-range" id="bo-effort" min="0" max="6" value="3"></div>
+                                                class="form-range" id="bo-effort" min="0" max="6" value="3">
+                                        </div>
                                         <div><label class="form-label small">Instability</label><input type="range"
                                                 class="form-range" id="bo-instability" min="0" max="6" value="3">
                                         </div>
@@ -981,10 +1017,13 @@
                                             <h5 class="card-title text-primary">
                                                 <i class="fas fa-play me-2"></i>Continue Optimization
                                             </h5>
-                                            <p class="card-text">Load all previous metabolic cost data (from Grid Search
-                                                and Effort BO) into the optimization and suggest the next geometry based
+                                            <p class="card-text">Load all previous metabolic cost data (from
+                                                Grid Search
+                                                and Effort BO) into the optimization and suggest the next
+                                                geometry based
                                                 on all historical data.</p>
-                                            <button class="btn btn-primary" id="effort-continue-btn">Continue with
+                                            <button class="btn btn-primary" id="effort-continue-btn">Continue
+                                                with
                                                 Existing Data</button>
                                         </div>
                                     </div>
@@ -995,10 +1034,13 @@
                                             <h5 class="card-title text-danger">
                                                 <i class="fas fa-refresh me-2"></i>Restart Optimization
                                             </h5>
-                                            <p class="card-text">Start fresh optimization by inputting the starting
-                                                geometry. Previous effort data will be preserved but marked as inactive
+                                            <p class="card-text">Start fresh optimization by inputting the
+                                                starting
+                                                geometry. Previous effort data will be preserved but marked as
+                                                inactive
                                                 for this session.</p>
-                                            <button class="btn btn-success" id="effort-restart-btn">Start Fresh</button>
+                                            <button class="btn btn-success" id="effort-restart-btn">Start
+                                                Fresh</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1052,11 +1094,13 @@
                                     <!-- Geometry Actions (like Pain Optimization) -->
                                     <div class="geometry-actions d-flex gap-2 justify-content-center mb-3"
                                         id="effort-geometry-actions" style="display: none;">
-                                        <button class="btn btn-test-geometry" id="effort-test-geometry-btn">Test This
+                                        <button class="btn btn-test-geometry" id="effort-test-geometry-btn">Test
+                                            This
                                             Geometry</button>
                                         <button class="btn btn-suggest-alternative"
                                             id="effort-suggest-alternative-btn">Suggest Alternative</button>
-                                        <button class="btn btn-manual-loss" id="effort-manual-loss-btn">Assign Manual
+                                        <button class="btn btn-manual-loss" id="effort-manual-loss-btn">Assign
+                                            Manual
                                             Loss</button>
                                     </div>
 
@@ -1100,7 +1144,8 @@
                                         </div>
                                     </div>
                                     <div class="d-flex gap-2 mt-3">
-                                        <button class="btn btn-primary" id="effort-set-first-geometry-btn">Set First
+                                        <button class="btn btn-primary" id="effort-set-first-geometry-btn">Set
+                                            First
                                             Geometry</button>
                                         <button class="btn btn-secondary"
                                             id="effort-cancel-first-geometry-btn">Cancel</button>
@@ -1116,7 +1161,8 @@
                                 <div class="card-body">
                                     <form id="effort-survey-form">
                                         <div class="mb-3">
-                                            <label class="form-label">Enter the metabolic cost value from the separate
+                                            <label class="form-label">Enter the metabolic cost value from the
+                                                separate
                                                 analysis computer</label>
                                             <input type="number" class="form-control" id="effort-metabolic-cost-input"
                                                 step="0.1" placeholder="Enter metabolic cost value (ml/kg/min)">
@@ -1187,7 +1233,8 @@
                                         </div>
                                         <div class="progress-metric">
                                             <div class="progress-metric-label">Best Effort Score</div>
-                                            <div class="progress-metric-value best" id="effort-best-score">-</div>
+                                            <div class="progress-metric-value best" id="effort-best-score">-
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1244,8 +1291,10 @@
                                             <h5 class="card-title text-primary">
                                                 <i class="fas fa-play me-2"></i>Continue Optimization
                                             </h5>
-                                            <p class="card-text">Load all previous instability data (from Grid Search
-                                                and Instability BO) into the optimization and suggest the next geometry
+                                            <p class="card-text">Load all previous instability data (from Grid
+                                                Search
+                                                and Instability BO) into the optimization and suggest the next
+                                                geometry
                                                 based on all historical data.</p>
                                             <button class="btn btn-primary" id="instability-continue-btn">Continue with
                                                 Existing Data</button>
@@ -1258,7 +1307,8 @@
                                             <h5 class="card-title text-success">
                                                 <i class="fas fa-redo me-2"></i>Restart Optimization
                                             </h5>
-                                            <p class="card-text">Start fresh optimization from the beginning. Input your
+                                            <p class="card-text">Start fresh optimization from the beginning.
+                                                Input your
                                                 starting geometry manually and ignore all previous data.</p>
                                             <button class="btn btn-success" id="instability-restart-btn">Start
                                                 Fresh</button>
@@ -1292,21 +1342,24 @@
                                             <div class="col">
                                                 <div class="metric-card">
                                                     <div class="metric-label">Alpha (α)</div>
-                                                    <div class="metric-value" id="instability-geometry-alpha">-</div>
+                                                    <div class="metric-value" id="instability-geometry-alpha">-
+                                                    </div>
                                                     <div class="metric-unit">degrees</div>
                                                 </div>
                                             </div>
                                             <div class="col">
                                                 <div class="metric-card">
                                                     <div class="metric-label">Beta (β)</div>
-                                                    <div class="metric-value" id="instability-geometry-beta">-</div>
+                                                    <div class="metric-value" id="instability-geometry-beta">-
+                                                    </div>
                                                     <div class="metric-unit">degrees</div>
                                                 </div>
                                             </div>
                                             <div class="col">
                                                 <div class="metric-card">
                                                     <div class="metric-label">Gamma (γ)</div>
-                                                    <div class="metric-value" id="instability-geometry-gamma">-</div>
+                                                    <div class="metric-value" id="instability-geometry-gamma">-
+                                                    </div>
                                                     <div class="metric-unit">degrees</div>
                                                 </div>
                                             </div>
@@ -1317,7 +1370,8 @@
                                     <div class="connection-status alert alert-info mb-3"
                                         id="instability-connection-status">
                                         <i class="fas fa-bluetooth-b me-2"></i>
-                                        <span id="instability-connection-text">Click "Connect IMU" to begin</span>
+                                        <span id="instability-connection-text">Click "Connect IMU" to
+                                            begin</span>
                                     </div>
 
                                     <!-- Geometry Actions (shown immediately like Pain/Effort) -->
@@ -1326,7 +1380,8 @@
                                         <button class="btn btn-test-geometry" id="instability-test-geometry-btn">Test
                                             This Geometry</button>
                                         <button class="btn btn-suggest-alternative"
-                                            id="instability-suggest-alternative-btn">Suggest Alternative</button>
+                                            id="instability-suggest-alternative-btn">Suggest
+                                            Alternative</button>
                                         <button class="btn btn-manual-loss" id="instability-manual-loss-btn">Assign
                                             Manual Loss</button>
                                     </div>
@@ -1348,7 +1403,8 @@
                                         </button>
 
                                         <div class="ms-auto d-flex align-items-center gap-3">
-                                            <div id="instability-stopwatch" class="stopwatch-display">00:00.0</div>
+                                            <div id="instability-stopwatch" class="stopwatch-display">00:00.0
+                                            </div>
                                             <button id="instability-start-stop-btn" class="btn btn-success btn-lg"
                                                 disabled>
                                                 <i class="fas fa-play"></i> Start
@@ -1387,19 +1443,22 @@
                                     <p class="text-muted">Please enter the first geometry to test:</p>
                                     <div class="row">
                                         <div class="col">
-                                            <label for="instability-first-alpha" class="form-label">Alpha (α)</label>
+                                            <label for="instability-first-alpha" class="form-label">Alpha
+                                                (α)</label>
                                             <input type="number" class="form-control" id="instability-first-alpha"
                                                 min="70" max="120" step="5" value="90">
                                             <small class="text-muted">Range: 70-120° (steps of 5°)</small>
                                         </div>
                                         <div class="col">
-                                            <label for="instability-first-beta" class="form-label">Beta (β)</label>
+                                            <label for="instability-first-beta" class="form-label">Beta
+                                                (β)</label>
                                             <input type="number" class="form-control" id="instability-first-beta"
                                                 min="90" max="140" step="5" value="110">
                                             <small class="text-muted">Range: 90-140° (steps of 5°)</small>
                                         </div>
                                         <div class="col">
-                                            <label for="instability-first-gamma" class="form-label">Gamma (γ)</label>
+                                            <label for="instability-first-gamma" class="form-label">Gamma
+                                                (γ)</label>
                                             <input type="number" class="form-control" id="instability-first-gamma"
                                                 min="-12" max="12" step="3" value="0">
                                             <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
@@ -1443,7 +1502,8 @@
 
                                     <!-- Step Editing -->
                                     <div class="mb-3">
-                                        <label class="form-label small">Edit Steps (click on plot to add/remove)</label>
+                                        <label class="form-label small">Edit Steps (click on plot to
+                                            add/remove)</label>
                                         <div id="instability-steps-list" class="border rounded p-2"
                                             style="max-height: 150px; overflow-y: auto;">
                                             <!-- Step list will be populated here -->
@@ -1469,12 +1529,14 @@
                                 </div>
                                 <div class="card-body">
                                     <form id="instability-survey-form">
-                                        <p class="text-muted small mb-3">Please rate your agreement with each statement
+                                        <p class="text-muted small mb-3">Please rate your agreement with each
+                                            statement
                                             about this crutch configuration:</p>
 
                                         <!-- SUS Questions (adapted for crutch usability) -->
                                         <div class="mb-3">
-                                            <label class="form-label small">1. I think that I would like to use this
+                                            <label class="form-label small">1. I think that I would like to use
+                                                this
                                                 crutch configuration frequently</label>
                                             <div class="d-flex justify-content-between small text-muted">
                                                 <span>Strongly Disagree</span>
@@ -1502,7 +1564,8 @@
                                         </div>
 
                                         <div class="mb-3">
-                                            <label class="form-label small">3. I thought this crutch configuration was
+                                            <label class="form-label small">3. I thought this crutch
+                                                configuration was
                                                 easy to use</label>
                                             <div class="d-flex justify-content-between small text-muted">
                                                 <span>Strongly Disagree</span>
@@ -1516,7 +1579,8 @@
                                         </div>
 
                                         <div class="mb-3">
-                                            <label class="form-label small">4. I think that I would need technical
+                                            <label class="form-label small">4. I think that I would need
+                                                technical
                                                 support to be able to use this crutch</label>
                                             <div class="d-flex justify-content-between small text-muted">
                                                 <span>Strongly Disagree</span>
@@ -1530,7 +1594,8 @@
                                         </div>
 
                                         <div class="mb-3">
-                                            <label class="form-label small">5. I found the various functions in this
+                                            <label class="form-label small">5. I found the various functions in
+                                                this
                                                 crutch were well integrated</label>
                                             <div class="d-flex justify-content-between small text-muted">
                                                 <span>Strongly Disagree</span>
@@ -1565,19 +1630,22 @@
                                     <p class="text-muted">Enter your preferred geometry:</p>
                                     <div class="row">
                                         <div class="col">
-                                            <label for="instability-alt-alpha" class="form-label">Alpha (α)</label>
+                                            <label for="instability-alt-alpha" class="form-label">Alpha
+                                                (α)</label>
                                             <input type="number" class="form-control" id="instability-alt-alpha"
                                                 min="70" max="120" step="5" value="90">
                                             <small class="text-muted">Range: 70-120° (steps of 5°)</small>
                                         </div>
                                         <div class="col">
-                                            <label for="instability-alt-beta" class="form-label">Beta (β)</label>
+                                            <label for="instability-alt-beta" class="form-label">Beta
+                                                (β)</label>
                                             <input type="number" class="form-control" id="instability-alt-beta" min="90"
                                                 max="140" step="5" value="110">
                                             <small class="text-muted">Range: 90-140° (steps of 5°)</small>
                                         </div>
                                         <div class="col">
-                                            <label for="instability-alt-gamma" class="form-label">Gamma (γ)</label>
+                                            <label for="instability-alt-gamma" class="form-label">Gamma
+                                                (γ)</label>
                                             <input type="number" class="form-control" id="instability-alt-gamma"
                                                 min="-12" max="12" step="3" value="0">
                                             <small class="text-muted">Range: -12 to +12° (steps of 3°)</small>
@@ -1585,7 +1653,8 @@
                                     </div>
                                     <div class="d-flex gap-2 mt-3">
                                         <button class="btn btn-warning"
-                                            id="instability-set-alternative-geometry-btn">Use This Geometry</button>
+                                            id="instability-set-alternative-geometry-btn">Use This
+                                            Geometry</button>
                                         <button class="btn btn-secondary"
                                             id="instability-cancel-alternative-geometry-btn">Cancel</button>
                                     </div>
@@ -1627,11 +1696,13 @@
                                     <div class="progress-metrics">
                                         <div class="progress-metric">
                                             <div class="progress-metric-label">Best Loss</div>
-                                            <div class="progress-metric-value best" id="instability-best-loss">-</div>
+                                            <div class="progress-metric-value best" id="instability-best-loss">-
+                                            </div>
                                         </div>
                                         <div class="progress-metric">
                                             <div class="progress-metric-label">Total Trials</div>
-                                            <div class="progress-metric-value" id="instability-total-trials">0</div>
+                                            <div class="progress-metric-value" id="instability-total-trials">0
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1841,7 +1912,8 @@
     <script src="/static/js/ui-components.js"></script>
     <script src="/static/js/device-manager.js"></script>
     <script src="/static/js/optimization.js"></script>
-    <script src="/static/js/systematic-mode.js"></script>
+    <!-- Systematic Mode - Now modularized! -->
+    <script type="module" src="/static/js/systematic-mode.js"></script>
     <script src="/static/js/app.js"></script>
     <!-- Legacy main.js kept for backward compatibility - will be gradually phased out -->
     <!-- <script src="/static/js/main.js"></script> -->

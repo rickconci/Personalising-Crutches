@@ -141,6 +141,7 @@ class CrutchApp {
 
         // Connect device button (systematic mode)
         this.elements.connectDeviceBtn?.addEventListener('click', () => {
+            console.log('Connect device button clicked');
             this._connectDevice();
         });
     }
@@ -318,7 +319,7 @@ class CrutchApp {
 
         // Validate required fields
         if (!participantData.name) {
-            this.modules.ui.showNotification('Please enter a participant name', 'warning');
+            this.modules.ui.showNotification('Please enter a participant ID', 'warning');
             return;
         }
 
@@ -333,6 +334,12 @@ class CrutchApp {
 
             this.modules.ui.showNotification('Participant created successfully', 'success');
             form.reset();
+
+            // Automatically select the newly created participant
+            if (this.elements.participantSelect) {
+                this.elements.participantSelect.value = newParticipant.id;
+                await this._onParticipantSelected(newParticipant.id);
+            }
 
         } catch (error) {
             this.modules.ui.showNotification(`Failed to create participant: ${error.message}`, 'danger');
@@ -421,12 +428,16 @@ class CrutchApp {
      * @private
      */
     async _connectDevice() {
+        console.log('_connectDevice called');
         try {
+            console.log('Attempting to connect to device...');
             const success = await this.modules.device.connect();
+            console.log('Connection result:', success);
             if (success) {
                 this.modules.ui.showNotification('Device connected successfully', 'success');
             }
         } catch (error) {
+            console.error('Connection error:', error);
             this.modules.ui.showNotification(`Failed to connect to device: ${error.message}`, 'danger');
         }
     }

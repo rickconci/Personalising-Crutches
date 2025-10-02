@@ -168,26 +168,146 @@ class ExperimentService:
     
     def create_trial(self, trial_data: TrialCreate) -> Trial:
         """Create a new trial."""
+        # If geometry parameters are provided but no geometry_id, find or create the geometry
+        if trial_data.geometry_id is None and all([
+            trial_data.alpha is not None,
+            trial_data.beta is not None,
+            trial_data.gamma is not None
+        ]):
+            # Find or create geometry
+            geometry = self.db.query(SQLCrutchGeometry).filter(
+                SQLCrutchGeometry.alpha == trial_data.alpha,
+                SQLCrutchGeometry.beta == trial_data.beta,
+                SQLCrutchGeometry.gamma == trial_data.gamma,
+                SQLCrutchGeometry.delta == (trial_data.delta or 0)
+            ).first()
+            
+            if not geometry:
+                geometry_name = f"α{trial_data.alpha}_β{trial_data.beta}_γ{trial_data.gamma}"
+                geometry = SQLCrutchGeometry(
+                    name=geometry_name,
+                    alpha=trial_data.alpha,
+                    beta=trial_data.beta,
+                    gamma=trial_data.gamma,
+                    delta=trial_data.delta or 0
+                )
+                self.db.add(geometry)
+                self.db.flush()  # Get the ID
+            
+            geometry_id = geometry.id
+        else:
+            geometry_id = trial_data.geometry_id
+        
+        # Convert Pydantic models to dict for JSON fields
+        survey_responses_dict = None
+        survey_fields = {}
+        if trial_data.survey_responses:
+            if hasattr(trial_data.survey_responses, 'dict'):
+                survey_responses_dict = trial_data.survey_responses.dict()
+            else:
+                survey_responses_dict = trial_data.survey_responses
+            
+            # Extract individual survey fields for columns
+            if survey_responses_dict:
+                survey_fields = {
+                    'sus_q1': survey_responses_dict.get('sus_q1'),
+                    'sus_q2': survey_responses_dict.get('sus_q2'),
+                    'sus_q3': survey_responses_dict.get('sus_q3'),
+                    'sus_q4': survey_responses_dict.get('sus_q4'),
+                    'sus_q5': survey_responses_dict.get('sus_q5'),
+                    'sus_q6': survey_responses_dict.get('sus_q6'),
+                    'sus_score': survey_responses_dict.get('sus_score'),
+                    'nrs_score': survey_responses_dict.get('nrs_score'),
+                    'tlx_mental_demand': survey_responses_dict.get('tlx_mental_demand'),
+                    'tlx_physical_demand': survey_responses_dict.get('tlx_physical_demand'),
+                    'tlx_performance': survey_responses_dict.get('tlx_performance'),
+                    'tlx_effort': survey_responses_dict.get('tlx_effort'),
+                    'tlx_frustration': survey_responses_dict.get('tlx_frustration'),
+                    'tlx_score': survey_responses_dict.get('tlx_score')
+                }
+        
+        # Extract processed features into individual columns
+        processed_features_fields = {}
+        if trial_data.processed_features:
+            processed_features_fields = {
+                'step_count': trial_data.processed_features.get('step_count'),
+                'step_variance': trial_data.processed_features.get('step_variance'),
+                'instability_loss': trial_data.processed_features.get('instability_loss'),
+                'y_change': trial_data.processed_features.get('y_change'),
+                'y_total': trial_data.processed_features.get('y_total'),
+                'rms_load_cell_force': trial_data.processed_features.get('rms_load_cell_force'),
+            }
+        
+        # Get geometry to copy alpha, beta, gamma, delta values
+        geometry = self.db.query(SQLCrutchGeometry).filter(SQLCrutchGeometry.id == geometry_id).first()
+        
         sql_trial = SQLTrial(
             participant_id=trial_data.participant_id,
-            geometry_id=trial_data.geometry_id,
-            alpha=trial_data.alpha,
-            beta=trial_data.beta,
-            gamma=trial_data.gamma,
-            delta=trial_data.delta,
+            geometry_id=geometry_id,
+            alpha=geometry.alpha if geometry else trial_data.alpha,
+            beta=geometry.beta if geometry else trial_data.beta,
+            gamma=geometry.gamma if geometry else trial_data.gamma,
+            delta=geometry.delta if geometry else trial_data.delta,
             source=trial_data.source,
             raw_data_path=trial_data.raw_data_path,
             processed_features=trial_data.processed_features,
-            survey_responses=trial_data.survey_responses,
+            survey_responses=survey_responses_dict,
             steps=trial_data.steps,
             metabolic_cost=trial_data.metabolic_cost,
-            total_combined_loss=trial_data.total_combined_loss
+            total_combined_loss=trial_data.total_combined_loss,
+            **survey_fields,  # Unpack individual survey fields
+            **processed_features_fields  # Unpack processed features into columns
         )
         self.db.add(sql_trial)
         self.db.commit()
         self.db.refresh(sql_trial)
         return self._sql_trial_to_pydantic(sql_trial)
-    
+
+    def create_trial_with_geometry(self, participant_id: int, trial_data: "TrialCreateManual") -> Trial:
+        """
+        Create a trial from manual geometry input.
+        Finds an existing geometry or creates a new one.
+        """
+        # Check if participant exists
+        participant = self.db.query(SQLParticipant).filter(SQLParticipant.id == participant_id).first()
+        if not participant:
+            raise ValueError("Participant not found")
+
+        # Find or create the geometry
+        geometry = self.db.query(SQLCrutchGeometry).filter(
+            SQLCrutchGeometry.alpha == trial_data.alpha,
+            SQLCrutchGeometry.beta == trial_data.beta,
+            SQLCrutchGeometry.gamma == trial_data.gamma,
+            SQLCrutchGeometry.delta == trial_data.delta
+        ).first()
+
+        if not geometry:
+            geometry_name = f"α{trial_data.alpha}_β{trial_data.beta}_γ{trial_data.gamma}"
+            geometry = SQLCrutchGeometry(
+                name=geometry_name,
+                alpha=trial_data.alpha,
+                beta=trial_data.beta,
+                gamma=trial_data.gamma,
+                delta=trial_data.delta
+            )
+            self.db.add(geometry)
+            self.db.flush()  # Use flush to get the ID before commit
+
+        # Create the trial
+        sql_trial = SQLTrial(
+            participant_id=participant_id,
+            geometry_id=geometry.id,
+            alpha=geometry.alpha,
+            beta=geometry.beta,
+            gamma=geometry.gamma,
+            delta=geometry.delta,
+            source=trial_data.source
+        )
+        self.db.add(sql_trial)
+        self.db.commit()
+        self.db.refresh(sql_trial)
+        return self._sql_trial_to_pydantic(sql_trial)
+
     def update_trial(self, trial_id: int, trial_data: TrialUpdate) -> Optional[Trial]:
         """Update a trial."""
         sql_trial = self.db.query(SQLTrial).filter(SQLTrial.id == trial_id).first()
@@ -195,8 +315,45 @@ class ExperimentService:
             return None
         
         update_data = trial_data.dict(exclude_unset=True)
+        
+        # Extract survey responses if provided
+        if 'survey_responses' in update_data and update_data['survey_responses']:
+            survey_dict = update_data['survey_responses']
+            if hasattr(survey_dict, 'dict'):
+                survey_dict = survey_dict.dict()
+            
+            # Set individual survey columns
+            if survey_dict:
+                sql_trial.sus_q1 = survey_dict.get('sus_q1')
+                sql_trial.sus_q2 = survey_dict.get('sus_q2')
+                sql_trial.sus_q3 = survey_dict.get('sus_q3')
+                sql_trial.sus_q4 = survey_dict.get('sus_q4')
+                sql_trial.sus_q5 = survey_dict.get('sus_q5')
+                sql_trial.sus_q6 = survey_dict.get('sus_q6')
+                sql_trial.sus_score = survey_dict.get('sus_score')
+                sql_trial.nrs_score = survey_dict.get('nrs_score')
+                sql_trial.tlx_mental_demand = survey_dict.get('tlx_mental_demand')
+                sql_trial.tlx_physical_demand = survey_dict.get('tlx_physical_demand')
+                sql_trial.tlx_performance = survey_dict.get('tlx_performance')
+                sql_trial.tlx_effort = survey_dict.get('tlx_effort')
+                sql_trial.tlx_frustration = survey_dict.get('tlx_frustration')
+                sql_trial.tlx_score = survey_dict.get('tlx_score')
+        
+        # Extract processed features into individual columns if provided
+        if 'processed_features' in update_data and update_data['processed_features']:
+            features_dict = update_data['processed_features']
+            if features_dict:
+                sql_trial.step_count = features_dict.get('step_count')
+                sql_trial.step_variance = features_dict.get('step_variance')
+                sql_trial.instability_loss = features_dict.get('instability_loss')
+                sql_trial.y_change = features_dict.get('y_change')
+                sql_trial.y_total = features_dict.get('y_total')
+                sql_trial.rms_load_cell_force = features_dict.get('rms_load_cell_force')
+        
+        # Update other fields
         for field, value in update_data.items():
-            setattr(sql_trial, field, value)
+            if field not in ['survey_responses', 'processed_features']:  # Already handled above
+                setattr(sql_trial, field, value)
         
         sql_trial.updated_at = datetime.utcnow()
         self.db.commit()
@@ -298,14 +455,34 @@ class ExperimentService:
             # If the source doesn't match any enum value, default to GRID_SEARCH
             source_enum = TrialSource.GRID_SEARCH
         
+        # Get geometry parameters from the related geometry object
+        alpha = sql_trial.alpha  # Use trial's alpha first
+        beta = sql_trial.beta
+        gamma = sql_trial.gamma
+        delta = sql_trial.delta
+        geometry_name = None
+        
+        if sql_trial.geometry:
+            # Use geometry values if trial doesn't have them
+            if alpha is None:
+                alpha = sql_trial.geometry.alpha
+            if beta is None:
+                beta = sql_trial.geometry.beta
+            if gamma is None:
+                gamma = sql_trial.geometry.gamma
+            if delta is None:
+                delta = sql_trial.geometry.delta
+            geometry_name = sql_trial.geometry.name
+        
         return Trial(
             id=sql_trial.id,
             participant_id=sql_trial.participant_id,
             geometry_id=sql_trial.geometry_id,
-            alpha=sql_trial.alpha,
-            beta=sql_trial.beta,
-            gamma=sql_trial.gamma,
-            delta=sql_trial.delta,
+            geometry_name=geometry_name,
+            alpha=alpha,
+            beta=beta,
+            gamma=gamma,
+            delta=delta,
             source=source_enum,
             raw_data_path=sql_trial.raw_data_path,
             processed_features=sql_trial.processed_features,
@@ -313,6 +490,7 @@ class ExperimentService:
             steps=sql_trial.steps,
             metabolic_cost=sql_trial.metabolic_cost,
             total_combined_loss=sql_trial.total_combined_loss,
+            instability_loss=sql_trial.instability_loss,
             timestamp=sql_trial.timestamp,
             deleted=sql_trial.deleted_at
         )

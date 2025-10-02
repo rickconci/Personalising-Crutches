@@ -11,7 +11,7 @@ from datetime import datetime
 
 class ParticipantBase(BaseModel):
     """Base participant model with common fields."""
-    name: str = Field(..., min_length=1, max_length=100, description="Participant name")
+    name: str = Field(..., min_length=1, max_length=100, description="Participant ID (e.g., P001, Subject_123)")
     characteristics: Optional[Dict[str, Any]] = Field(
         default=None, 
         description="Participant characteristics (height, weight, etc.)"

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..core.models import (
     ParticipantBase, ParticipantCreate, ParticipantUpdate, Participant, ParticipantResponse,
-    TrialBase, TrialCreate, TrialUpdate, Trial, TrialResponse,
+    TrialBase, TrialCreate, TrialUpdate, Trial, TrialResponse, TrialCreateManual,
     CrutchGeometryBase, GeometryCreate, GeometryUpdate, CrutchGeometry, GeometryResponse
 )
 from ..core.services.experiment_service import ExperimentService
@@ -73,6 +73,20 @@ async def delete_participant(
     if not success:
         raise HTTPException(status_code=404, detail="Participant not found")
     return {"message": "Participant deleted successfully"}
+
+
+@router.post("/participants/{participant_id}/trials", response_model=Trial)
+async def create_trial_for_participant(
+    participant_id: int,
+    trial_data: TrialCreateManual,
+    service: ExperimentService = Depends(get_experiment_service)
+):
+    """Create a new trial for a specific participant with manual geometry."""
+    try:
+        return service.create_trial_with_geometry(participant_id, trial_data)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
 
 @router.get("/geometries", response_model=List[CrutchGeometry])
 async def get_geometries(
@@ -160,10 +174,11 @@ async def update_trial(
 @router.delete("/trials/{trial_id}")
 async def delete_trial(
     trial_id: int,
+    soft_delete: bool = False,  # Default to hard delete for research use
     service: ExperimentService = Depends(get_experiment_service)
 ):
-    """Delete a trial."""
-    success = service.delete_trial(trial_id)
+    """Delete a trial (hard delete by default, optional soft delete)."""
+    success = service.delete_trial(trial_id, soft_delete=soft_delete)
     if not success:
         raise HTTPException(status_code=404, detail="Trial not found")
     return {"message": "Trial deleted successfully"}

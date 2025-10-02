@@ -28,6 +28,36 @@ class DataProcessingService:
         self.step_detector = StepDetector()
         self.gait_analyzer = GaitAnalyzer()
     
+    def get_participant_data_directory(
+        self, 
+        participant_name: str, 
+        data_type: str = "trials",
+        date: Optional[str] = None
+    ) -> Path:
+        """
+        Get or create an organized directory for participant data.
+        
+        Directory structure: data/raw/{participant_name}/{date}/{data_type}/
+        
+        Args:
+            participant_name: Name of the participant (e.g., "MH1")
+            data_type: Type of data ("trials", "metabolic", "surveys", "processed")
+            date: Date string (YYYY-MM-DD). If None, uses today's date.
+            
+        Returns:
+            Path object for the directory
+        """
+        from datetime import datetime
+        
+        # Use today's date if not specified
+        if date is None:
+            date = datetime.now().strftime("%Y-%m-%d")
+        
+        base_dir = Path(settings.raw_data_directory)
+        participant_dir = base_dir / participant_name / date / data_type
+        participant_dir.mkdir(parents=True, exist_ok=True)
+        return participant_dir
+    
     async def upload_data_file(
         self, 
         file: UploadFile, 
@@ -35,7 +65,10 @@ class DataProcessingService:
         participant_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
-        Upload and store a data file.
+        Upload and store a data file with organized directory structure.
+        
+        Directory structure:
+        data/raw/{participant_name}/trials/{trial_id}_{geometry_name}_{timestamp}.csv
         
         Args:
             file: Uploaded file
@@ -45,14 +78,46 @@ class DataProcessingService:
         Returns:
             Dictionary with file information
         """
-        # Create upload directory
-        upload_dir = Path(settings.raw_data_directory)
-        upload_dir.mkdir(parents=True, exist_ok=True)
+        from database.models import Participant
+        from datetime import datetime
         
-        # Generate unique filename
+        # Get participant and trial info for organized file structure
+        participant_name = "unknown"
+        geometry_name = "unknown"
+        
+        if trial_id:
+            trial = self.db.query(Trial).filter(Trial.id == trial_id).first()
+            if trial:
+                if trial.participant:
+                    participant_name = trial.participant.name
+                if trial.geometry:
+                    geometry_name = trial.geometry.name
+        elif participant_id:
+            participant = self.db.query(Participant).filter(Participant.id == participant_id).first()
+            if participant:
+                participant_name = participant.name
+        
+        # Get current date and time for organization
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H%M%S")
+        
+        # Create organized directory structure: participant/date/trials/
+        participant_dir = self.get_participant_data_directory(
+            participant_name=participant_name,
+            data_type="trials",
+            date=date_str
+        )
+        
+        # Generate descriptive filename (date is in directory, so just time in filename)
         file_extension = Path(file.filename).suffix
-        unique_filename = f"{trial_id}_{file.filename}" if trial_id else file.filename
-        file_path = upload_dir / unique_filename
+        
+        if trial_id:
+            unique_filename = f"{trial_id}_{geometry_name}_{time_str}{file_extension}"
+        else:
+            unique_filename = f"{time_str}_{file.filename}"
+        
+        file_path = participant_dir / unique_filename
         
         # Save file
         with open(file_path, "wb") as buffer:
@@ -70,6 +135,13 @@ class DataProcessingService:
         )
         
         self.db.add(data_file)
+        
+        # Update trial with raw_data_path if trial_id is provided
+        if trial_id:
+            trial = self.db.query(Trial).filter(Trial.id == trial_id).first()
+            if trial:
+                trial.raw_data_path = str(file_path)
+        
         self.db.commit()
         self.db.refresh(data_file)
         
@@ -116,6 +188,29 @@ class DataProcessingService:
                 step_result.step_times
             )
             
+            # Prepare plot data
+            plot_data = {}
+            if isinstance(data, pd.DataFrame):
+                # Prepare time series for plotting
+                time_data = data['time'].tolist() if 'time' in data.columns else list(range(len(data)))
+                
+                # Calculate force derivative if force data is available
+                force_derivative = []
+                if 'force' in data.columns:
+                    force = data['force'].values
+                    time = data['time'].values if 'time' in data.columns else np.arange(len(force)) / self.step_detector.fs
+                    force_derivative = np.gradient(force, time).tolist()
+                
+                plot_data = {
+                    "time": time_data,
+                    "acc_x": data['acc_x_data'].tolist() if 'acc_x_data' in data.columns else [],
+                    "acc_z": data['acc_z_data'].tolist() if 'acc_z_data' in data.columns else [],
+                    "force": data['force'].tolist() if 'force' in data.columns else [],
+                    "force_derivative": force_derivative,
+                    "step_times": step_result.step_times.tolist(),
+                    "step_indices": step_result.step_indices.tolist()
+                }
+            
             # Prepare results
             results = {
                 "step_detection": {
@@ -131,7 +226,8 @@ class DataProcessingService:
                     "sampling_frequency": self.step_detector.fs,
                     "duration": len(data) / self.step_detector.fs if hasattr(data, '__len__') else 0,
                     "data_points": len(data) if hasattr(data, '__len__') else 0
-                }
+                },
+                "plots": plot_data
             }
             
             return results
@@ -305,11 +401,27 @@ class DataProcessingService:
         else:
             raise ValueError(f"Unsupported file type: {file_path.suffix}")
         
+        # Map common column names to expected format
+        column_mapping = {
+            'accX': 'acc_x_data',
+            'accY': 'acc_z_data',  # Map accY to acc_z_data for vertical acceleration
+            'acc_x': 'acc_x_data',
+            'acc_z': 'acc_z_data',
+            'acc_x_data': 'acc_x_data',
+            'acc_z_data': 'acc_z_data'
+        }
+        
+        # Apply column mapping
+        for old_name, new_name in column_mapping.items():
+            if old_name in data.columns and new_name not in data.columns:
+                data[new_name] = data[old_name]
+        
         # Validate required columns
         required_columns = ['acc_x_data', 'acc_z_data']
         missing_columns = [col for col in required_columns if col not in data.columns]
         if missing_columns:
-            raise ValueError(f"Missing required columns: {missing_columns}")
+            available_columns = list(data.columns)
+            raise ValueError(f"Missing required columns: {missing_columns}. Available columns: {available_columns}")
         
         # Add time column if not present
         if 'time' not in data.columns:
@@ -338,6 +450,7 @@ class DataProcessingService:
         return {
             "id": data_file.id,
             "filename": data_file.filename,
+            "file_path": data_file.file_path,  # Added this
             "processing_status": data_file.processing_status,
             "uploaded_at": data_file.uploaded_at.isoformat(),
             "processed_at": data_file.processed_at.isoformat() if data_file.processed_at else None,

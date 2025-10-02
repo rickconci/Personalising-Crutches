@@ -5,8 +5,10 @@ This module provides endpoints for data upload, processing, and analysis.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
+from pathlib import Path
 
 from ..core.models import (
     DataUpload,
@@ -54,8 +56,11 @@ async def process_data_file(
 ):
     """Process a data file with step detection."""
     try:
+        print(f"Processing file {file_id} with algorithm {algorithm}")
+        
         # Get file info
         file_info = service.get_processing_status(file_id)
+        print(f"File info: {file_info}")
         
         # Process the file
         result = service.process_accelerometer_data(
@@ -64,14 +69,22 @@ async def process_data_file(
             use_force_gradient=use_force_gradient
         )
         
+        print(f"Processing completed successfully")
+        
         return {
             "file_id": file_id,
             "processing_results": result,
             "status": "completed"
         }
     except ValueError as e:
+        print(f"ValueError in process_data_file: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        print(f"Exception in process_data_file: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
 @router.post("/process-trial/{trial_id}")
@@ -177,6 +190,21 @@ async def get_available_algorithms():
         for algo in StepDetectionAlgorithm
     ]
     return {"algorithms": algorithms}
+
+@router.get("/test-data")
+async def get_test_data():
+    """Get test data CSV file for test mode."""
+    # Get the path to the test data file
+    base_path = Path(__file__).parent.parent.parent / "data" / "test_data" / "live_recorded_data.csv"
+    
+    if not base_path.exists():
+        raise HTTPException(status_code=404, detail="Test data file not found")
+    
+    return FileResponse(
+        path=str(base_path),
+        media_type="text/csv",
+        filename="live_recorded_data.csv"
+    )
 
 def _get_algorithm_description(algorithm: StepDetectionAlgorithm) -> str:
     """Get description for an algorithm."""

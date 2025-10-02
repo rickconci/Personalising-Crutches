@@ -6,7 +6,7 @@ This module contains Pydantic models for data validation and serialization.
 
 from .participant import ParticipantBase, ParticipantCreate, ParticipantUpdate, Participant, ParticipantResponse
 from .geometry import CrutchGeometryBase, GeometryCreate, GeometryUpdate, CrutchGeometry, GeometryResponse, GeometrySuggestion
-from .trial import TrialBase, TrialCreate, TrialUpdate, Trial, TrialResponse, TrialAnalysis, SurveyResponse, TrialSource
+from .trial import TrialBase, TrialCreate, TrialCreateManual, TrialUpdate, Trial, TrialResponse, TrialAnalysis, SurveyResponse, TrialSource
 from .data_upload import (
     DataUpload,
     DataUploadResponse,
@@ -30,6 +30,7 @@ __all__ = [
     "GeometrySuggestion",
     "TrialBase",
     "TrialCreate",
+    "TrialCreateManual",
     "TrialUpdate",
     "Trial",
     "TrialResponse",

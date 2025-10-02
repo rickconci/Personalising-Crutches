@@ -24,7 +24,22 @@ class CrutchAPI {
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+                // Better error message formatting for validation errors
+                let errorMessage = `HTTP error! status: ${response.status}`;
+                if (errorData.detail) {
+                    if (Array.isArray(errorData.detail)) {
+                        // FastAPI validation errors
+                        errorMessage = errorData.detail.map(err =>
+                            `${err.loc.join('.')}: ${err.msg}`
+                        ).join(', ');
+                    } else if (typeof errorData.detail === 'string') {
+                        errorMessage = errorData.detail;
+                    } else {
+                        errorMessage = JSON.stringify(errorData.detail);
+                    }
+                }
+                console.error('API error details:', errorData);
+                throw new Error(errorMessage);
             }
 
             const contentType = response.headers.get('content-type');
@@ -93,6 +108,10 @@ class CrutchAPI {
 
     async deleteTrial(trialId) {
         return this.request(`/experiments/trials/${trialId}`, 'DELETE');
+    }
+
+    async createTrialForParticipant(participantId, geometryData) {
+        return this.request(`/experiments/participants/${participantId}/trials`, 'POST', geometryData);
     }
 
     // Data processing endpoints

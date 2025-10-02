@@ -19,7 +19,7 @@ class Participant(Base):
     __tablename__ = "participants"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True)  # Used as Participant ID (e.g., P001, Subject_123)
     characteristics = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=True)
@@ -36,13 +36,15 @@ class Participant(Base):
         return self.name
 
 
+
+
 class CrutchGeometry(Base):
-    """Represents a predefined crutch geometry."""
+    """Represents a crutch geometry configuration."""
     
     __tablename__ = "crutch_geometries"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(80), unique=True, nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True)
     alpha = Column(Float, nullable=False)
     beta = Column(Float, nullable=False)
     gamma = Column(Float, nullable=False)
@@ -54,7 +56,7 @@ class CrutchGeometry(Base):
     trials = relationship("Trial", back_populates="geometry")
     
     def __repr__(self) -> str:
-        return f"<CrutchGeometry {self.name}>"
+        return f"<CrutchGeometry α={self.alpha}° β={self.beta}° γ={self.gamma}°>"
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert geometry to dictionary."""
@@ -77,13 +79,13 @@ class Trial(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     participant_id = Column(Integer, ForeignKey("participants.id"), nullable=False, index=True)
-    geometry_id = Column(Integer, ForeignKey("crutch_geometries.id"), nullable=True, index=True)
+    geometry_id = Column(Integer, ForeignKey("crutch_geometries.id"), nullable=False, index=True)
     
-    # BO trial parameters (for trials without predefined geometries)
+    # Geometry parameters (denormalized for easier querying and analysis)
     alpha = Column(Float, nullable=True)
     beta = Column(Float, nullable=True)
     gamma = Column(Float, nullable=True)
-    delta = Column(Float, nullable=True, default=0.0)
+    delta = Column(Float, nullable=True)
     
     # Trial metadata
     experiment_session_id = Column(Integer, ForeignKey("experiment_sessions.id"), nullable=True, index=True)
@@ -93,16 +95,40 @@ class Trial(Base):
     
     # Processed data
     processed_features = Column(JSON, nullable=True)
-    survey_responses = Column(JSON, nullable=True)
+    survey_responses = Column(JSON, nullable=True)  # Legacy JSON field for backward compatibility
     steps = Column(JSON, nullable=True)  # List of step timestamps
+    
+    # Detailed survey response columns
+    # SUS (System Usability Scale) - 6 questions
+    sus_q1 = Column(Integer, nullable=True)
+    sus_q2 = Column(Integer, nullable=True)
+    sus_q3 = Column(Integer, nullable=True)
+    sus_q4 = Column(Integer, nullable=True)
+    sus_q5 = Column(Integer, nullable=True)
+    sus_q6 = Column(Integer, nullable=True)
+    sus_score = Column(Float, nullable=True)
+    
+    # NRS (Numeric Rating Scale) - Pain assessment
+    nrs_score = Column(Integer, nullable=True)
+    
+    # NASA TLX (Task Load Index) - 5 questions
+    tlx_mental_demand = Column(Integer, nullable=True)
+    tlx_physical_demand = Column(Integer, nullable=True)
+    tlx_performance = Column(Integer, nullable=True)
+    tlx_effort = Column(Integer, nullable=True)
+    tlx_frustration = Column(Integer, nullable=True)
+    tlx_score = Column(Integer, nullable=True)
     
     # Metrics
     metabolic_cost = Column(Float, nullable=True)
     y_change = Column(Float, nullable=True)
     y_total = Column(Float, nullable=True)
+    step_count = Column(Integer, nullable=True)  # Number of steps detected
     step_variance = Column(Float, nullable=True)
+    instability_loss = Column(Float, nullable=True)  # Instability metric
     rms_load_cell_force = Column(Float, nullable=True)
     total_combined_loss = Column(Float, nullable=True)
+    laps = Column(Integer, nullable=True)  # Number of laps completed
     
     # Soft delete
     deleted_at = Column(DateTime, nullable=True, index=True)
@@ -133,26 +159,45 @@ class Trial(Base):
             "participant_id": self.participant_id,
             "participant_name": self.participant.name if self.participant else None,
             "geometry_id": self.geometry_id,
+            "geometry": self.geometry.to_dict() if self.geometry else None,
             "geometry_name": self.geometry.name if self.geometry else None,
-            "alpha": self.alpha,
-            "beta": self.beta,
-            "gamma": self.gamma,
-            "delta": self.delta,
+            "alpha": self.alpha if self.alpha is not None else (self.geometry.alpha if self.geometry else None),
+            "beta": self.beta if self.beta is not None else (self.geometry.beta if self.geometry else None),
+            "gamma": self.gamma if self.gamma is not None else (self.geometry.gamma if self.geometry else None),
+            "delta": self.delta if self.delta is not None else (self.geometry.delta if self.geometry else None),
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "source": self.source,
             "raw_data_path": self.raw_data_path,
             "processed_features": self.processed_features,
-            "survey_responses": self.survey_responses,
+            "survey_responses": self.survey_responses,  # Legacy JSON field
             "steps": self.steps,
             "metabolic_cost": self.metabolic_cost,
             "y_change": self.y_change,
             "y_total": self.y_total,
+            "step_count": self.step_count,
             "step_variance": self.step_variance,
+            "instability_loss": self.instability_loss,
             "rms_load_cell_force": self.rms_load_cell_force,
             "total_combined_loss": self.total_combined_loss,
+            "laps": self.laps,
             "is_deleted": self.is_deleted,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            # Detailed survey response fields
+            "sus_q1": self.sus_q1,
+            "sus_q2": self.sus_q2,
+            "sus_q3": self.sus_q3,
+            "sus_q4": self.sus_q4,
+            "sus_q5": self.sus_q5,
+            "sus_q6": self.sus_q6,
+            "sus_score": self.sus_score,
+            "nrs_score": self.nrs_score,
+            "tlx_mental_demand": self.tlx_mental_demand,
+            "tlx_physical_demand": self.tlx_physical_demand,
+            "tlx_performance": self.tlx_performance,
+            "tlx_effort": self.tlx_effort,
+            "tlx_frustration": self.tlx_frustration,
+            "tlx_score": self.tlx_score,
         }
 
 

@@ -52,20 +52,25 @@ class UIComponents {
      */
     async showConfirmDialog(message, title = 'Confirm Action') {
         return new Promise((resolve) => {
+            // Determine if this is a delete action to style accordingly
+            const isDeleteAction = title.toLowerCase().includes('delete');
+            const confirmBtnClass = isDeleteAction ? 'btn-danger' : 'btn-primary';
+            const confirmBtnText = isDeleteAction ? 'Delete' : 'Confirm';
+
             const modalHtml = `
                 <div class="modal fade" id="confirmModal" tabindex="-1">
                     <div class="modal-dialog">
                         <div class="modal-content">
-                            <div class="modal-header">
+                            <div class="modal-header ${isDeleteAction ? 'bg-danger text-white' : ''}">
                                 <h5 class="modal-title">${title}</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                <button type="button" class="btn-close ${isDeleteAction ? 'btn-close-white' : ''}" data-bs-dismiss="modal"></button>
                             </div>
                             <div class="modal-body">
                                 <p>${message}</p>
                             </div>
                             <div class="modal-footer">
                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                <button type="button" class="btn btn-primary" id="confirmBtn">Confirm</button>
+                                <button type="button" class="btn ${confirmBtnClass}" id="confirmBtn">${confirmBtnText}</button>
                             </div>
                         </div>
                     </div>

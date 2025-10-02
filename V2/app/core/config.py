@@ -57,6 +57,16 @@ class ExperimentConfig:
     # Initial crutch geometry (default starting point)
     INITIAL_CRUTCH_GEOMETRY = {'alpha': 90, 'beta': 110, 'gamma': 0, 'delta': 0}
     
+    # Default geometry sequence for experiments
+    DEFAULT_GEOMETRY_SEQUENCE = 'baseline_comparison'
+    
+    # Available geometry sequences
+    AVAILABLE_SEQUENCES = [
+        'grid_search_3x3x3',
+        'baseline_comparison', 
+        'custom_sequence'
+    ]
+    
     # Crutch parameter boundaries for optimization
     CRUTCH_PARAM_BOUNDARIES = [
         {'name': 'alpha', 'type': 'discrete', 'domain': np.arange(70, 125, 5).tolist()},
