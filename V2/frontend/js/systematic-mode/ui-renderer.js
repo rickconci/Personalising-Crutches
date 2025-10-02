@@ -502,6 +502,15 @@ export class UIRenderer {
             `;
             listElement.appendChild(row);
         });
+
+        // Update step count displays
+        const stepCountElements = [
+            document.getElementById('step-count'),
+            document.getElementById('step-count-display')
+        ];
+        stepCountElements.forEach(el => {
+            if (el) el.textContent = steps.length;
+        });
     }
 
     /**

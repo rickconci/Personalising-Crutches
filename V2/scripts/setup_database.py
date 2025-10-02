@@ -61,8 +61,8 @@ def main():
         session = SessionLocal()
         
         try:
-    # Create initial data
-    create_sample_participant(session)
+            # Create initial data
+            create_sample_participant(session)
             
             print("Database setup completed successfully!")
             print("\nNext steps:")

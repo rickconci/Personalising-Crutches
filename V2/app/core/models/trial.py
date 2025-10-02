@@ -120,6 +120,7 @@ class TrialBase(BaseModel):
     metabolic_cost: Optional[float] = Field(None, description="Metabolic cost metric")
     total_combined_loss: Optional[float] = Field(None, description="Total combined loss value")
     instability_loss: Optional[float] = Field(None, description="Instability loss metric")
+    laps_completed: Optional[float] = Field(None, description="Number of laps completed during trial (can be fractional)", ge=0)
 
 
 class TrialCreate(TrialBase):

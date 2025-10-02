@@ -71,7 +71,8 @@ export class SurveyManager {
             steps,
             instabilityLoss,
             surveyResponses,
-            metabolicCost
+            metabolicCost,
+            lapsCompleted
         } = trialData;
 
         // Validate required fields
@@ -97,10 +98,12 @@ export class SurveyManager {
                     processed_features: {
                         step_count: steps.length,
                         instability_loss: instabilityLoss,
-                        step_variance: instabilityLoss
+                        step_variance: instabilityLoss,
+                        laps_completed: lapsCompleted
                     },
                     steps: steps,
-                    metabolic_cost: metabolicCost
+                    metabolic_cost: metabolicCost,
+                    laps_completed: lapsCompleted
                 };
 
                 console.log('Updating trial', trialId, 'with payload:', updatePayload);
@@ -122,10 +125,12 @@ export class SurveyManager {
                     processed_features: {
                         step_count: steps.length,
                         instability_loss: instabilityLoss,
-                        step_variance: instabilityLoss
+                        step_variance: instabilityLoss,
+                        laps_completed: lapsCompleted
                     },
                     steps: steps,
-                    metabolic_cost: metabolicCost
+                    metabolic_cost: metabolicCost,
+                    laps_completed: lapsCompleted
                 };
 
                 console.log('Creating new trial with payload:', createPayload);

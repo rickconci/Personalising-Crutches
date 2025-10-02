@@ -312,51 +312,35 @@ class StepDetector:
     
     def _algorithm_7_force_derivative(self, signal: np.ndarray, multichannel: np.ndarray, **kwargs) -> np.ndarray:
         """
-        Algorithm 7: Improved Force derivative detection.
+        Algorithm 7: Force derivative detection (V1 compatible).
         
-        This algorithm detects steps by finding peaks in the force derivative (gradient).
-        Steps typically show up as rapid positive changes (rising edges) in force.
+        This algorithm detects steps by finding NEGATIVE peaks in the force derivative.
+        When the force decreases rapidly (negative gradient), it indicates the crutch
+        is being unloaded, which marks a step event.
         
-        Improvements:
-        1. Apply smoothing to reduce noise in derivative
-        2. Use absolute value to catch both positive and negative changes
-        3. More adaptive threshold based on median absolute deviation (MAD)
-        4. Configurable parameters
+        This matches the V1 implementation:
+        - Compute force gradient over time
+        - Filter for negative gradients (force decreasing)
+        - Find peaks in the negative gradient signal
         """
         if multichannel.shape[1] < 2:
             return np.array([])
         
         force_gradient = multichannel[:, 1]
         
-        # Apply Savitzky-Golay filter to smooth the derivative signal
-        # This reduces noise while preserving step transitions
-        window_length = min(11, len(force_gradient) if len(force_gradient) % 2 == 1 else len(force_gradient) - 1)
-        if window_length >= 5:
-            force_gradient_smooth = savgol_filter(force_gradient, window_length, polyorder=2)
-        else:
-            force_gradient_smooth = force_gradient
+        # Calculate dynamic threshold based on the minimum (most negative) gradient
+        # V1 uses: threshold = d_force_dt.min() * 0.2
+        threshold = force_gradient.min() * 0.2
         
-        # Use absolute value to detect both positive and negative changes
-        force_gradient_abs = np.abs(force_gradient_smooth)
+        # Filter to keep only negative gradients below threshold
+        # V1: d_force_dt_filtered = np.where(d_force_dt < threshold, d_force_dt, 0)
+        force_gradient_filtered = np.where(force_gradient < threshold, force_gradient, 0)
         
-        # More robust threshold using Median Absolute Deviation (MAD)
-        # This is less sensitive to outliers than std
-        median = np.median(force_gradient_abs)
-        mad = np.median(np.abs(force_gradient_abs - median))
-        threshold = median + 3.0 * mad  # 3 MAD is typically good for outlier detection
-        
-        # Alternative: Use a percentile-based threshold (e.g., top 10% of values)
-        percentile_threshold = np.percentile(force_gradient_abs, 90)
-        threshold = max(threshold, percentile_threshold)
-        
-        # Find peaks with minimum distance between steps
-        min_distance = int(0.3 * self.fs)  # Reduced from 0.4s to catch faster steps
-        peaks, properties = find_peaks(
-            force_gradient_abs, 
-            height=threshold, 
-            distance=min_distance,
-            prominence=threshold * 0.5  # Require some prominence to avoid noise
-        )
+        # Find peaks in the INVERTED filtered signal
+        # This finds the most negative points (largest drops in force)
+        # V1: peaks, _ = find_peaks(-d_force_dt_filtered, distance=min_dist_samples)
+        min_distance = int(0.3 * self.fs)  # 300ms minimum between steps
+        peaks, _ = find_peaks(-force_gradient_filtered, distance=min_distance)
         
         return peaks
     

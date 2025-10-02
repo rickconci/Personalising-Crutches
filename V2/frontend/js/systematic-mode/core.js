@@ -810,6 +810,10 @@ export class SystematicMode {
             const surveyResponses = this.surveyManager.collectSurveyResponses();
             const metabolicCost = this.surveyManager.getMetabolicCost();
 
+            // Get laps completed
+            const lapsInput = document.getElementById('laps-completed-input');
+            const lapsCompleted = lapsInput ? parseFloat(lapsInput.value) || 0 : 0;
+
             // Get current metrics
             const instabilityLoss = this.elements.instabilityLoss ?
                 parseFloat(this.elements.instabilityLoss.textContent) : 0;
@@ -822,7 +826,8 @@ export class SystematicMode {
                 steps: this.stepManager.getSteps(),
                 instabilityLoss: instabilityLoss,
                 surveyResponses: surveyResponses,
-                metabolicCost: metabolicCost
+                metabolicCost: metabolicCost,
+                lapsCompleted: lapsCompleted
             };
 
             console.log('_saveTrial called with currentTrialId:', this.currentTrialId);
@@ -879,6 +884,18 @@ export class SystematicMode {
         }
         if (this.elements.stepCount) {
             this.elements.stepCount.textContent = '0';
+        }
+
+        // Reset laps input
+        const lapsInput = document.getElementById('laps-completed-input');
+        if (lapsInput) {
+            lapsInput.value = '0';
+        }
+
+        // Reset step count display
+        const stepCountDisplay = document.getElementById('step-count-display');
+        if (stepCountDisplay) {
+            stepCountDisplay.textContent = '0';
         }
     }
 }

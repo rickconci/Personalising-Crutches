@@ -128,7 +128,7 @@ class Trial(Base):
     instability_loss = Column(Float, nullable=True)  # Instability metric
     rms_load_cell_force = Column(Float, nullable=True)
     total_combined_loss = Column(Float, nullable=True)
-    laps = Column(Integer, nullable=True)  # Number of laps completed
+    laps = Column(Float, nullable=True)  # Number of laps completed (can be fractional)
     
     # Soft delete
     deleted_at = Column(DateTime, nullable=True, index=True)

@@ -133,7 +133,7 @@ class CrutchAPI {
         return response.json();
     }
 
-    async processFile(fileId, algorithm = 'algo6_javascript', useForceGradient = false) {
+    async processFile(fileId, algorithm = 'algo7_force_derivative', useForceGradient = true) {
         const formData = new FormData();
         formData.append('algorithm', algorithm);
         formData.append('use_force_gradient', useForceGradient);

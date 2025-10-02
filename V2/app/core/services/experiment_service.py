@@ -349,11 +349,18 @@ class ExperimentService:
                 sql_trial.y_change = features_dict.get('y_change')
                 sql_trial.y_total = features_dict.get('y_total')
                 sql_trial.rms_load_cell_force = features_dict.get('rms_load_cell_force')
+                # Handle laps_completed from both direct field and processed_features
+                if 'laps_completed' in features_dict:
+                    sql_trial.laps = features_dict.get('laps_completed')
         
         # Update other fields
         for field, value in update_data.items():
             if field not in ['survey_responses', 'processed_features']:  # Already handled above
-                setattr(sql_trial, field, value)
+                # Map laps_completed to laps in the database
+                if field == 'laps_completed':
+                    sql_trial.laps = value
+                else:
+                    setattr(sql_trial, field, value)
         
         sql_trial.updated_at = datetime.utcnow()
         self.db.commit()
@@ -474,6 +481,35 @@ class ExperimentService:
                 delta = sql_trial.geometry.delta
             geometry_name = sql_trial.geometry.name
         
+        # Construct survey_responses from individual columns
+        survey_responses = None
+        if any([sql_trial.sus_score, sql_trial.nrs_score, sql_trial.tlx_score]):
+            survey_responses = {
+                'sus_q1': sql_trial.sus_q1,
+                'sus_q2': sql_trial.sus_q2,
+                'sus_q3': sql_trial.sus_q3,
+                'sus_q4': sql_trial.sus_q4,
+                'sus_q5': sql_trial.sus_q5,
+                'sus_q6': sql_trial.sus_q6,
+                'sus_score': sql_trial.sus_score,
+                'nrs_score': sql_trial.nrs_score,
+                'tlx_mental_demand': sql_trial.tlx_mental_demand,
+                'tlx_physical_demand': sql_trial.tlx_physical_demand,
+                'tlx_performance': sql_trial.tlx_performance,
+                'tlx_effort': sql_trial.tlx_effort,
+                'tlx_frustration': sql_trial.tlx_frustration,
+                'tlx_score': sql_trial.tlx_score
+            }
+        
+        # Construct processed_features from individual columns
+        processed_features = sql_trial.processed_features or {}
+        if sql_trial.step_count is not None:
+            processed_features['step_count'] = sql_trial.step_count
+        if sql_trial.step_variance is not None:
+            processed_features['step_variance'] = sql_trial.step_variance
+        if sql_trial.instability_loss is not None:
+            processed_features['instability_loss'] = sql_trial.instability_loss
+        
         return Trial(
             id=sql_trial.id,
             participant_id=sql_trial.participant_id,
@@ -485,12 +521,13 @@ class ExperimentService:
             delta=delta,
             source=source_enum,
             raw_data_path=sql_trial.raw_data_path,
-            processed_features=sql_trial.processed_features,
-            survey_responses=sql_trial.survey_responses,
+            processed_features=processed_features if processed_features else None,
+            survey_responses=survey_responses,
             steps=sql_trial.steps,
             metabolic_cost=sql_trial.metabolic_cost,
             total_combined_loss=sql_trial.total_combined_loss,
             instability_loss=sql_trial.instability_loss,
+            laps_completed=sql_trial.laps,
             timestamp=sql_trial.timestamp,
             deleted=sql_trial.deleted_at
         )

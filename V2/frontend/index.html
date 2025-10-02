@@ -133,7 +133,7 @@
 
                                     <!-- Analysis Results & Survey (appear after trial stops) -->
                                     <div class="row mt-3">
-                                        <div class="col-md-8">
+                                        <div class="col-12">
                                             <div id="plots-area" class="d-none">
                                                 <div class="row">
                                                     <div class="col-12">
@@ -141,6 +141,7 @@
                                                         </div>
                                                     </div>
                                                 </div>
+
                                                 <!-- Step Interaction Table -->
                                                 <div id="step-interaction-area" class="d-none">
                                                     <h6>Detected Steps (<span id="step-count">0</span>)</h6>
@@ -163,319 +164,384 @@
                                                         </table>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div id="metrics-and-survey-area" class="d-none border-start ps-3">
-                                                <h6 class="text-center">Calculated Metrics</h6>
-                                                <div class="row">
-                                                    <div class="col-md-12">
-                                                        <div class="metric-box">
-                                                            <h6 class="text-muted">Instability Loss
-                                                                (Variance, s²)
-                                                            </h6>
-                                                            <p id="instability-loss-value" class="h4 mb-0">-
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
 
-                                                <hr>
-
-                                                <div id="survey-sections">
-                                                    <!-- Section 1: Usability (Adapted SUS) -->
-                                                    <div class="card mb-3">
-                                                        <div class="card-header">
-                                                            <h6 class="mb-0">Usability Survey (Adapted SUS)</h6>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <p class="text-muted small">Scale: 1 (Strongly Disagree) to
-                                                                5
-                                                                (Strongly Agree)</p>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">1. I think that I would
-                                                                    like
-                                                                    to use the crutches frequently.</label>
-                                                                <select class="form-select form-select-sm sus-question"
-                                                                    data-positive="true">
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3" selected>3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">2. I thought the
-                                                                    crutches
-                                                                    were easy to use.</label>
-                                                                <select class="form-select form-select-sm sus-question"
-                                                                    data-positive="true">
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3" selected>3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">3. I think that I would
-                                                                    need
-                                                                    the support of a technical person to be able to use
-                                                                    these crutches.</label>
-                                                                <select class="form-select form-select-sm sus-question"
-                                                                    data-positive="false">
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3" selected>3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">4. I would imagine that
-                                                                    most
-                                                                    people would learn to use these crutches very
-                                                                    quickly.</label>
-                                                                <select class="form-select form-select-sm sus-question"
-                                                                    data-positive="true">
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3" selected>3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">5. I felt very confident
-                                                                    using the crutches.</label>
-                                                                <select class="form-select form-select-sm sus-question"
-                                                                    data-positive="true">
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3" selected>3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                </select>
-                                                            </div>
-                                                            <div>
-                                                                <label class="form-label small">6. I needed to learn a
-                                                                    lot
-                                                                    of things before I could get going with these
-                                                                    crutches.</label>
-                                                                <select class="form-select form-select-sm sus-question"
-                                                                    data-positive="false">
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3" selected>3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                </select>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Section 2: Pain (NRS) -->
-                                                    <div class="card mb-3">
-                                                        <div class="card-header">
-                                                            <h6 class="mb-0">Pain Scale (NRS)</h6>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <p class="text-muted small">On a scale from 0 (No pain) to
-                                                                10
-                                                                (Worst possible pain), how would you rate your pain?</p>
-                                                            <select id="nrs-score" class="form-select">
-                                                                <option value="0">0 - No pain</option>
-                                                                <option value="1">1</option>
-                                                                <option value="2">2</option>
-                                                                <option value="3">3</option>
-                                                                <option value="4">4</option>
-                                                                <option value="5" selected>5 - Moderate pain</option>
-                                                                <option value="6">6</option>
-                                                                <option value="7">7</option>
-                                                                <option value="8">8</option>
-                                                                <option value="9">9</option>
-                                                                <option value="10">10 - Worst possible pain</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Section 3: Workload (NASA-TLX) -->
-                                                    <div class="card mb-3">
-                                                        <div class="card-header">
-                                                            <h6 class="mb-0">Workload Survey (NASA-TLX)</h6>
-                                                        </div>
-                                                        <div class="card-body">
-                                                            <p class="text-muted small">Scale: 0 (Very Low) to 20 (Very
-                                                                High)</p>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">Mental Demand: How
-                                                                    mentally
-                                                                    demanding was the task?</label>
-                                                                <select class="form-select form-select-sm tlx-question">
-                                                                    <option value="0">0</option>
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3">3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                    <option value="6">6</option>
-                                                                    <option value="7">7</option>
-                                                                    <option value="8">8</option>
-                                                                    <option value="9">9</option>
-                                                                    <option value="10" selected>10</option>
-                                                                    <option value="11">11</option>
-                                                                    <option value="12">12</option>
-                                                                    <option value="13">13</option>
-                                                                    <option value="14">14</option>
-                                                                    <option value="15">15</option>
-                                                                    <option value="16">16</option>
-                                                                    <option value="17">17</option>
-                                                                    <option value="18">18</option>
-                                                                    <option value="19">19</option>
-                                                                    <option value="20">20</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">Physical Demand: How
-                                                                    physically demanding was the task?</label>
-                                                                <select class="form-select form-select-sm tlx-question">
-                                                                    <option value="0">0</option>
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3">3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                    <option value="6">6</option>
-                                                                    <option value="7">7</option>
-                                                                    <option value="8">8</option>
-                                                                    <option value="9">9</option>
-                                                                    <option value="10" selected>10</option>
-                                                                    <option value="11">11</option>
-                                                                    <option value="12">12</option>
-                                                                    <option value="13">13</option>
-                                                                    <option value="14">14</option>
-                                                                    <option value="15">15</option>
-                                                                    <option value="16">16</option>
-                                                                    <option value="17">17</option>
-                                                                    <option value="18">18</option>
-                                                                    <option value="19">19</option>
-                                                                    <option value="20">20</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">Performance: How
-                                                                    successful
-                                                                    were you in accomplishing what you were asked to
-                                                                    do?</label>
-                                                                <select class="form-select form-select-sm tlx-question">
-                                                                    <option value="0">0</option>
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3">3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                    <option value="6">6</option>
-                                                                    <option value="7">7</option>
-                                                                    <option value="8">8</option>
-                                                                    <option value="9">9</option>
-                                                                    <option value="10" selected>10</option>
-                                                                    <option value="11">11</option>
-                                                                    <option value="12">12</option>
-                                                                    <option value="13">13</option>
-                                                                    <option value="14">14</option>
-                                                                    <option value="15">15</option>
-                                                                    <option value="16">16</option>
-                                                                    <option value="17">17</option>
-                                                                    <option value="18">18</option>
-                                                                    <option value="19">19</option>
-                                                                    <option value="20">20</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">Effort: How hard did you
-                                                                    have to work to accomplish your level of
-                                                                    performance?</label>
-                                                                <select class="form-select form-select-sm tlx-question">
-                                                                    <option value="0">0</option>
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3">3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                    <option value="6">6</option>
-                                                                    <option value="7">7</option>
-                                                                    <option value="8">8</option>
-                                                                    <option value="9">9</option>
-                                                                    <option value="10" selected>10</option>
-                                                                    <option value="11">11</option>
-                                                                    <option value="12">12</option>
-                                                                    <option value="13">13</option>
-                                                                    <option value="14">14</option>
-                                                                    <option value="15">15</option>
-                                                                    <option value="16">16</option>
-                                                                    <option value="17">17</option>
-                                                                    <option value="18">18</option>
-                                                                    <option value="19">19</option>
-                                                                    <option value="20">20</option>
-                                                                </select>
-                                                            </div>
-                                                            <div>
-                                                                <label class="form-label small">Frustration: How
-                                                                    insecure,
-                                                                    discouraged, irritated, stressed, and annoyed were
-                                                                    you?</label>
-                                                                <select class="form-select form-select-sm tlx-question">
-                                                                    <option value="0">0</option>
-                                                                    <option value="1">1</option>
-                                                                    <option value="2">2</option>
-                                                                    <option value="3">3</option>
-                                                                    <option value="4">4</option>
-                                                                    <option value="5">5</option>
-                                                                    <option value="6">6</option>
-                                                                    <option value="7">7</option>
-                                                                    <option value="8">8</option>
-                                                                    <option value="9">9</option>
-                                                                    <option value="10" selected>10</option>
-                                                                    <option value="11">11</option>
-                                                                    <option value="12">12</option>
-                                                                    <option value="13">13</option>
-                                                                    <option value="14">14</option>
-                                                                    <option value="15">15</option>
-                                                                    <option value="16">16</option>
-                                                                    <option value="17">17</option>
-                                                                    <option value="18">18</option>
-                                                                    <option value="19">19</option>
-                                                                    <option value="20">20</option>
-                                                                </select>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Section 4: Metabolic Cost Input -->
+                                                <!-- Metrics and Survey Section (Now Below Plots) -->
+                                                <div id="metrics-and-survey-area" class="d-none mt-4">
                                                     <div class="card">
                                                         <div class="card-header">
-                                                            <h6 class="mb-0">Metabolic Cost Input</h6>
+                                                            <h5 class="mb-0">Trial Metrics & Survey</h5>
                                                         </div>
                                                         <div class="card-body">
-                                                            <p class="text-muted small">Enter the metabolic cost value
-                                                                from
-                                                                the separate analysis computer</p>
-                                                            <div class="mb-3">
-                                                                <label class="form-label small">Metabolic Cost
-                                                                    (ml/kg/min)</label>
-                                                                <input type="number" class="form-control"
-                                                                    id="metabolic-cost-input" step="0.1"
-                                                                    placeholder="Enter metabolic cost value">
+                                                            <!-- Metrics Row -->
+                                                            <div class="row mb-4">
+                                                                <div class="col-md-4">
+                                                                    <div
+                                                                        class="metric-box text-center p-3 border rounded">
+                                                                        <h6 class="text-muted">Instability Loss
+                                                                            (Variance, s²)</h6>
+                                                                        <p id="instability-loss-value" class="h3 mb-0">-
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-4">
+                                                                    <div
+                                                                        class="metric-box text-center p-3 border rounded">
+                                                                        <h6 class="text-muted">Number of Laps Completed
+                                                                        </h6>
+                                                                        <input type="number" id="laps-completed-input"
+                                                                            class="form-control form-control-lg text-center"
+                                                                            min="0" step="0.5" value="0"
+                                                                            placeholder="Enter laps">
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-md-4">
+                                                                    <div
+                                                                        class="metric-box text-center p-3 border rounded">
+                                                                        <h6 class="text-muted">Steps Detected</h6>
+                                                                        <p class="h3 mb-0"><span
+                                                                                id="step-count-display">0</span></p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <hr>
+
+                                                            <div id="survey-sections">
+                                                                <!-- Section 1: Usability (Adapted SUS) -->
+                                                                <div class="card mb-3">
+                                                                    <div class="card-header">
+                                                                        <h6 class="mb-0">Usability Survey (Adapted SUS)
+                                                                        </h6>
+                                                                    </div>
+                                                                    <div class="card-body">
+                                                                        <p class="text-muted small">Scale: 1 (Strongly
+                                                                            Disagree) to
+                                                                            5
+                                                                            (Strongly Agree)</p>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">1. I think
+                                                                                that I would
+                                                                                like
+                                                                                to use the crutches frequently.</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm sus-question"
+                                                                                data-positive="true">
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3" selected>3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">2. I thought
+                                                                                the
+                                                                                crutches
+                                                                                were easy to use.</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm sus-question"
+                                                                                data-positive="true">
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3" selected>3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">3. I think
+                                                                                that I would
+                                                                                need
+                                                                                the support of a technical person to be
+                                                                                able to use
+                                                                                these crutches.</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm sus-question"
+                                                                                data-positive="false">
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3" selected>3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">4. I would
+                                                                                imagine that
+                                                                                most
+                                                                                people would learn to use these crutches
+                                                                                very
+                                                                                quickly.</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm sus-question"
+                                                                                data-positive="true">
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3" selected>3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">5. I felt
+                                                                                very confident
+                                                                                using the crutches.</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm sus-question"
+                                                                                data-positive="true">
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3" selected>3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label class="form-label small">6. I needed
+                                                                                to learn a
+                                                                                lot
+                                                                                of things before I could get going with
+                                                                                these
+                                                                                crutches.</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm sus-question"
+                                                                                data-positive="false">
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3" selected>3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <!-- Section 2: Pain (NRS) -->
+                                                                <div class="card mb-3">
+                                                                    <div class="card-header">
+                                                                        <h6 class="mb-0">Pain Scale (NRS)</h6>
+                                                                    </div>
+                                                                    <div class="card-body">
+                                                                        <p class="text-muted small">On a scale from 0
+                                                                            (No pain) to
+                                                                            10
+                                                                            (Worst possible pain), how would you rate
+                                                                            your pain?</p>
+                                                                        <select id="nrs-score" class="form-select">
+                                                                            <option value="0">0 - No pain</option>
+                                                                            <option value="1">1</option>
+                                                                            <option value="2">2</option>
+                                                                            <option value="3">3</option>
+                                                                            <option value="4">4</option>
+                                                                            <option value="5" selected>5 - Moderate pain
+                                                                            </option>
+                                                                            <option value="6">6</option>
+                                                                            <option value="7">7</option>
+                                                                            <option value="8">8</option>
+                                                                            <option value="9">9</option>
+                                                                            <option value="10">10 - Worst possible pain
+                                                                            </option>
+                                                                        </select>
+                                                                    </div>
+                                                                </div>
+
+                                                                <!-- Section 3: Workload (NASA-TLX) -->
+                                                                <div class="card mb-3">
+                                                                    <div class="card-header">
+                                                                        <h6 class="mb-0">Workload Survey (NASA-TLX)</h6>
+                                                                    </div>
+                                                                    <div class="card-body">
+                                                                        <p class="text-muted small">Scale: 0 (Very Low)
+                                                                            to 20 (Very
+                                                                            High)</p>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">Mental
+                                                                                Demand: How
+                                                                                mentally
+                                                                                demanding was the task?</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm tlx-question">
+                                                                                <option value="0">0</option>
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3">3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                                <option value="6">6</option>
+                                                                                <option value="7">7</option>
+                                                                                <option value="8">8</option>
+                                                                                <option value="9">9</option>
+                                                                                <option value="10" selected>10</option>
+                                                                                <option value="11">11</option>
+                                                                                <option value="12">12</option>
+                                                                                <option value="13">13</option>
+                                                                                <option value="14">14</option>
+                                                                                <option value="15">15</option>
+                                                                                <option value="16">16</option>
+                                                                                <option value="17">17</option>
+                                                                                <option value="18">18</option>
+                                                                                <option value="19">19</option>
+                                                                                <option value="20">20</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">Physical
+                                                                                Demand: How
+                                                                                physically demanding was the
+                                                                                task?</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm tlx-question">
+                                                                                <option value="0">0</option>
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3">3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                                <option value="6">6</option>
+                                                                                <option value="7">7</option>
+                                                                                <option value="8">8</option>
+                                                                                <option value="9">9</option>
+                                                                                <option value="10" selected>10</option>
+                                                                                <option value="11">11</option>
+                                                                                <option value="12">12</option>
+                                                                                <option value="13">13</option>
+                                                                                <option value="14">14</option>
+                                                                                <option value="15">15</option>
+                                                                                <option value="16">16</option>
+                                                                                <option value="17">17</option>
+                                                                                <option value="18">18</option>
+                                                                                <option value="19">19</option>
+                                                                                <option value="20">20</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">Performance:
+                                                                                How
+                                                                                successful
+                                                                                were you in accomplishing what you were
+                                                                                asked to
+                                                                                do?</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm tlx-question">
+                                                                                <option value="0">0</option>
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3">3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                                <option value="6">6</option>
+                                                                                <option value="7">7</option>
+                                                                                <option value="8">8</option>
+                                                                                <option value="9">9</option>
+                                                                                <option value="10" selected>10</option>
+                                                                                <option value="11">11</option>
+                                                                                <option value="12">12</option>
+                                                                                <option value="13">13</option>
+                                                                                <option value="14">14</option>
+                                                                                <option value="15">15</option>
+                                                                                <option value="16">16</option>
+                                                                                <option value="17">17</option>
+                                                                                <option value="18">18</option>
+                                                                                <option value="19">19</option>
+                                                                                <option value="20">20</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">Effort: How
+                                                                                hard did you
+                                                                                have to work to accomplish your level of
+                                                                                performance?</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm tlx-question">
+                                                                                <option value="0">0</option>
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3">3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                                <option value="6">6</option>
+                                                                                <option value="7">7</option>
+                                                                                <option value="8">8</option>
+                                                                                <option value="9">9</option>
+                                                                                <option value="10" selected>10</option>
+                                                                                <option value="11">11</option>
+                                                                                <option value="12">12</option>
+                                                                                <option value="13">13</option>
+                                                                                <option value="14">14</option>
+                                                                                <option value="15">15</option>
+                                                                                <option value="16">16</option>
+                                                                                <option value="17">17</option>
+                                                                                <option value="18">18</option>
+                                                                                <option value="19">19</option>
+                                                                                <option value="20">20</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label class="form-label small">Frustration:
+                                                                                How
+                                                                                insecure,
+                                                                                discouraged, irritated, stressed, and
+                                                                                annoyed were
+                                                                                you?</label>
+                                                                            <select
+                                                                                class="form-select form-select-sm tlx-question">
+                                                                                <option value="0">0</option>
+                                                                                <option value="1">1</option>
+                                                                                <option value="2">2</option>
+                                                                                <option value="3">3</option>
+                                                                                <option value="4">4</option>
+                                                                                <option value="5">5</option>
+                                                                                <option value="6">6</option>
+                                                                                <option value="7">7</option>
+                                                                                <option value="8">8</option>
+                                                                                <option value="9">9</option>
+                                                                                <option value="10" selected>10</option>
+                                                                                <option value="11">11</option>
+                                                                                <option value="12">12</option>
+                                                                                <option value="13">13</option>
+                                                                                <option value="14">14</option>
+                                                                                <option value="15">15</option>
+                                                                                <option value="16">16</option>
+                                                                                <option value="17">17</option>
+                                                                                <option value="18">18</option>
+                                                                                <option value="19">19</option>
+                                                                                <option value="20">20</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <!-- Section 4: Metabolic Cost Input -->
+                                                                <div class="card">
+                                                                    <div class="card-header">
+                                                                        <h6 class="mb-0">Metabolic Cost Input</h6>
+                                                                    </div>
+                                                                    <div class="card-body">
+                                                                        <p class="text-muted small">Enter the metabolic
+                                                                            cost value
+                                                                            from
+                                                                            the separate analysis computer</p>
+                                                                        <div class="mb-3">
+                                                                            <label class="form-label small">Metabolic
+                                                                                Cost
+                                                                                (ml/kg/min)</label>
+                                                                            <input type="number" class="form-control"
+                                                                                id="metabolic-cost-input" step="0.1"
+                                                                                placeholder="Enter metabolic cost value">
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="mt-3">
+                                                                <button type="button"
+                                                                    class="btn btn-primary btn-lg w-100"
+                                                                    id="save-trial-btn">
+                                                                    <i class="fas fa-save me-2"></i>Save Trial Results
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-
-                                                <div class="mt-3">
-                                                    <button type="button" class="btn btn-primary w-100"
-                                                        id="save-trial-btn">Save Trial
-                                                        Results</button>
                                                 </div>
                                             </div>
                                         </div>
