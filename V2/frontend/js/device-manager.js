@@ -13,6 +13,76 @@ class DeviceManager {
         this.bleCharacteristic = null;
         this.isConnected = false;
         this.dataBuffer = [];
+        this.sampleCounter = 0; // Track sample count for timing
+
+        // Bind the handler once so we can properly remove it later
+        this._boundCharacteristicHandler = this._handleCharacteristicValueChanged.bind(this);
+
+        // Binary packet parser
+        this.packetParser = {
+            buffer: new Uint8Array(),
+            HEADER_MARKER: 0xAA,
+            FOOTER_MARKER: 0xBB,
+            PACKET_SIZE: 14, // 1 byte header + 3*4=12 bytes floats + 1 byte footer
+
+            append: function (data) {
+                const newBuffer = new Uint8Array(this.buffer.length + data.byteLength);
+                newBuffer.set(this.buffer);
+                newBuffer.set(new Uint8Array(data), this.buffer.length);
+                this.buffer = newBuffer;
+            },
+
+            parse: function () {
+                let packets = [];
+                let stillSearching = true;
+                while (stillSearching) {
+                    if (this.buffer.length < this.PACKET_SIZE) {
+                        stillSearching = false;
+                        continue;
+                    }
+
+                    const headerIndex = this.buffer.indexOf(this.HEADER_MARKER);
+                    if (headerIndex === -1) {
+                        // No header found, discard buffer
+                        this.buffer = new Uint8Array();
+                        stillSearching = false;
+                        continue;
+                    }
+
+                    // If header isn't at the start, discard the bytes before it
+                    if (headerIndex > 0) {
+                        this.buffer = this.buffer.slice(headerIndex);
+                    }
+
+                    // Now that the header is at index 0, check if we have a full packet
+                    if (this.buffer.length < this.PACKET_SIZE) {
+                        stillSearching = false;
+                        continue;
+                    }
+
+                    if (this.buffer[this.PACKET_SIZE - 1] === this.FOOTER_MARKER) {
+                        // We have a valid packet
+                        const packetData = this.buffer.slice(1, this.PACKET_SIZE - 1);
+                        const view = new DataView(packetData.buffer);
+                        const force = view.getFloat32(0, true); // true for little-endian
+                        const accX = view.getFloat32(4, true);
+                        const accY = view.getFloat32(8, true);
+                        packets.push({ force, accX, accY });
+
+                        // Remove the processed packet from the buffer
+                        this.buffer = this.buffer.slice(this.PACKET_SIZE);
+                    } else {
+                        // Corrupted packet, discard the header and search again
+                        this.buffer = this.buffer.slice(1);
+                    }
+                }
+                return packets;
+            },
+
+            reset: function () {
+                this.buffer = new Uint8Array();
+            }
+        };
 
         // Event callbacks
         this.onDataReceived = null;
@@ -95,9 +165,13 @@ class DeviceManager {
 
         try {
             this.dataBuffer = []; // Clear previous data
+            this.sampleCounter = 0; // Reset sample counter
+            this.packetParser.reset(); // Clear parser buffer
             await this.bleCharacteristic.startNotifications();
+            // Use the pre-bound handler so we can remove it later
             this.bleCharacteristic.addEventListener('characteristicvaluechanged',
-                this._handleCharacteristicValueChanged.bind(this));
+                this._boundCharacteristicHandler);
+            console.log('Started data collection, added event listener');
             return true;
         } catch (error) {
             this._handleError(`Failed to start data collection: ${error.message}`);
@@ -112,8 +186,10 @@ class DeviceManager {
         if (this.bleCharacteristic) {
             try {
                 await this.bleCharacteristic.stopNotifications();
+                // Use the same bound handler reference to properly remove the listener
                 this.bleCharacteristic.removeEventListener('characteristicvaluechanged',
-                    this._handleCharacteristicValueChanged.bind(this));
+                    this._boundCharacteristicHandler);
+                console.log('Stopped data collection, removed event listener. Buffer size:', this.dataBuffer.length);
             } catch (error) {
                 console.warn('Error stopping notifications:', error);
             }
@@ -173,30 +249,35 @@ class DeviceManager {
      */
     _handleCharacteristicValueChanged(event) {
         try {
-            const value = event.target.value;
-            const decoder = new TextDecoder('utf-8');
-            const dataString = decoder.decode(value);
+            // Append new data to parser buffer
+            this.packetParser.append(event.target.value.buffer);
 
-            // Parse the data (assuming CSV format: timestamp,force)
-            const lines = dataString.trim().split('\n');
+            // Parse all complete packets
+            const newPackets = this.packetParser.parse();
 
-            for (const line of lines) {
-                if (line.trim()) {
-                    const parts = line.split(',');
-                    if (parts.length >= 2) {
-                        const timestamp = parseFloat(parts[0]);
-                        const force = parseFloat(parts[1]);
+            if (newPackets.length > 0) {
+                // Add timestamp to each packet and store in buffer
+                // Use 5ms intervals (200 Hz sampling rate) like V1
+                for (let i = 0; i < newPackets.length; i++) {
+                    const packet = newPackets[i];
+                    const dataPoint = {
+                        acc_x_time: this.sampleCounter * 5, // 5ms intervals, matches V1 backend
+                        acc_x_data: packet.accX,
+                        acc_z_data: packet.accY, // Map accY to acc_z_data
+                        force: packet.force
+                    };
+                    this.dataBuffer.push(dataPoint);
+                    this.sampleCounter++;
 
-                        if (!isNaN(timestamp) && !isNaN(force)) {
-                            const dataPoint = { timestamp, force };
-                            this.dataBuffer.push(dataPoint);
-
-                            // Notify listeners
-                            if (this.onDataReceived) {
-                                this.onDataReceived(dataPoint);
-                            }
-                        }
+                    // Notify listeners
+                    if (this.onDataReceived) {
+                        this.onDataReceived(dataPoint);
                     }
+                }
+
+                // Log every 100 samples for debugging
+                if (this.dataBuffer.length % 100 === 0) {
+                    console.log(`Collected ${this.dataBuffer.length} samples`);
                 }
             }
         } catch (error) {

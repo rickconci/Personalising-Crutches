@@ -15,8 +15,15 @@ export class SurveyManager {
     collectSurveyResponses() {
         const surveyResponses = {};
 
-        // SUS Score Calculation (6 questions)
-        const susQuestions = document.querySelectorAll('.sus-question');
+        // Scope queries to the systematic mode survey section only
+        const surveySection = document.getElementById('survey-sections');
+        if (!surveySection) {
+            console.error('Survey section not found');
+            return surveyResponses;
+        }
+
+        // SUS Score Calculation (6 questions in systematic mode)
+        const susQuestions = surveySection.querySelectorAll('.sus-question');
         let susScore = 0;
         susQuestions.forEach((q, index) => {
             const value = parseInt(q.value);
@@ -28,7 +35,9 @@ export class SurveyManager {
                 susScore += (5 - value);
             }
         });
-        surveyResponses['sus_score'] = (susScore / 24) * 100; // Normalize to 0-100
+        surveyResponses['sus_score'] = (susScore / 24) * 100; // Normalize to 0-100 (6 questions × 4 = 24)
+
+        console.log(`SUS: ${susQuestions.length} questions, raw score: ${susScore}, normalized: ${surveyResponses['sus_score']}`);
 
         // NRS Score
         const nrsScoreElement = document.getElementById('nrs-score');
@@ -37,14 +46,26 @@ export class SurveyManager {
         }
 
         // TLX Score Calculation (5 questions, 0-20 each)
-        const tlxQuestions = document.querySelectorAll('.tlx-question');
+        const tlxQuestions = surveySection.querySelectorAll('.tlx-question');
+        const tlxFieldNames = ['tlx_mental_demand', 'tlx_physical_demand', 'tlx_performance', 'tlx_effort', 'tlx_frustration'];
         let tlxScore = 0;
         tlxQuestions.forEach((q, index) => {
             const value = parseInt(q.value);
-            surveyResponses[`tlx_q${index + 1}`] = value;
+            if (index < tlxFieldNames.length) {
+                surveyResponses[tlxFieldNames[index]] = value;
+            }
             tlxScore += value;
         });
         surveyResponses['tlx_score'] = tlxScore; // Already on 0-100 scale
+
+        console.log(`TLX: ${tlxQuestions.length} questions, total score: ${tlxScore}`);
+        console.log('TLX breakdown:', {
+            mental_demand: surveyResponses['tlx_mental_demand'],
+            physical_demand: surveyResponses['tlx_physical_demand'],
+            performance: surveyResponses['tlx_performance'],
+            effort: surveyResponses['tlx_effort'],
+            frustration: surveyResponses['tlx_frustration']
+        });
 
         return surveyResponses;
     }
@@ -109,6 +130,15 @@ export class SurveyManager {
                 console.log('Updating trial', trialId, 'with payload:', updatePayload);
                 const response = await this.api.updateTrial(trialId, updatePayload);
                 console.log('Trial updated successfully:', response);
+
+                // Calculate total combined loss using backend
+                try {
+                    const lossResult = await this.api.calculateLoss(trialId, 'stability', surveyResponses);
+                    console.log('Loss calculated:', lossResult);
+                } catch (error) {
+                    console.warn('Failed to calculate loss:', error);
+                }
+
                 return response;
 
             } else {
@@ -136,6 +166,15 @@ export class SurveyManager {
                 console.log('Creating new trial with payload:', createPayload);
                 const response = await this.api.createTrial(createPayload);
                 console.log('Trial created successfully:', response);
+
+                // Calculate total combined loss using backend
+                try {
+                    const lossResult = await this.api.calculateLoss(response.id, 'stability', surveyResponses);
+                    console.log('Loss calculated:', lossResult);
+                } catch (error) {
+                    console.warn('Failed to calculate loss:', error);
+                }
+
                 return response;
             }
 

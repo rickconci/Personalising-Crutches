@@ -19,6 +19,25 @@ from ..algorithms.gait_analysis import GaitAnalyzer, GaitMetrics
 from ..config import settings, data_processing_config
 
 
+def clean_for_json(obj):
+    """Clean data structure to be JSON-safe by replacing NaN/inf with None."""
+    if obj is None:
+        return None
+    if isinstance(obj, (str, bool)):
+        return obj
+    if isinstance(obj, (int, np.integer)):
+        return int(obj)
+    if isinstance(obj, (float, np.floating)):
+        if np.isnan(obj) or np.isinf(obj):
+            return None
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: clean_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, np.ndarray)):
+        return [clean_for_json(item) for item in obj]
+    return obj
+
+
 class DataProcessingService:
     """Service for processing accelerometer data and detecting steps."""
     
@@ -230,7 +249,8 @@ class DataProcessingService:
                 "plots": plot_data
             }
             
-            return results
+            # Clean all data to ensure JSON compatibility
+            return clean_for_json(results)
             
         except Exception as e:
             raise ValueError(f"Error processing data: {str(e)}")

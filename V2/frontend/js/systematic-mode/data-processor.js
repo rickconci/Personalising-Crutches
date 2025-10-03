@@ -49,7 +49,7 @@ export class DataProcessor {
                 step_variance: processResult.processing_results.gait_metrics.step_variance,
                 y_change: processResult.processing_results.gait_metrics.y_change,
                 y_total: processResult.processing_results.gait_metrics.y_total,
-                total_combined_loss: processResult.processing_results.gait_metrics.step_variance || 0
+                // Don't set total_combined_loss here - it will be calculated by the backend
             };
 
             const updatedTrial = await this.api.updateTrial(newTrial.id, updateData);

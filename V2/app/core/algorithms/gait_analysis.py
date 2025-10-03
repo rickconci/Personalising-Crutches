@@ -26,16 +26,30 @@ class GaitMetrics:
     step_symmetry: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
+        """Convert to dictionary, handling NaN values."""
+        def clean_value(val):
+            """Convert NaN/inf to None for JSON compatibility."""
+            if val is None:
+                return None
+            if isinstance(val, (int, str, bool)):
+                return val
+            # Handle numpy and Python float NaN/inf
+            try:
+                if np.isnan(val) or np.isinf(val):
+                    return None
+            except (TypeError, ValueError):
+                pass
+            return val
+        
         return {
-            "step_count": self.step_count,
-            "step_variance": self.step_variance,
-            "y_change": self.y_change,
-            "y_total": self.y_total,
-            "rms_load_cell_force": self.rms_load_cell_force,
-            "step_frequency": self.step_frequency,
-            "step_regularity": self.step_regularity,
-            "step_symmetry": self.step_symmetry,
+            "step_count": clean_value(self.step_count),
+            "step_variance": clean_value(self.step_variance),
+            "y_change": clean_value(self.y_change),
+            "y_total": clean_value(self.y_total),
+            "rms_load_cell_force": clean_value(self.rms_load_cell_force),
+            "step_frequency": clean_value(self.step_frequency),
+            "step_regularity": clean_value(self.step_regularity),
+            "step_symmetry": clean_value(self.step_symmetry),
         }
 
 
