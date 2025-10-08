@@ -8,6 +8,8 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc
 from datetime import datetime
+from pathlib import Path
+import csv
 
 from database.models import Participant as SQLParticipant, CrutchGeometry as SQLCrutchGeometry, Trial as SQLTrial, ExperimentSession
 from ..models import (
@@ -253,6 +255,7 @@ class ExperimentService:
             processed_features=trial_data.processed_features,
             survey_responses=survey_responses_dict,
             steps=trial_data.steps,
+            opencap_events=trial_data.opencap_events,  # Store raw events as-is
             metabolic_cost=trial_data.metabolic_cost,
             total_combined_loss=trial_data.total_combined_loss,
             **survey_fields,  # Unpack individual survey fields
@@ -261,6 +264,14 @@ class ExperimentService:
         self.db.add(sql_trial)
         self.db.commit()
         self.db.refresh(sql_trial)
+        
+        # Save OpenCap events to CSV if present
+        if trial_data.opencap_events and trial_data.raw_data_path:
+            self._save_opencap_events_to_csv(
+                trial_data.opencap_events, 
+                trial_data.raw_data_path
+            )
+        
         return self._sql_trial_to_pydantic(sql_trial)
 
     def create_trial_with_geometry(self, participant_id: int, trial_data: "TrialCreateManual") -> Trial:
@@ -365,6 +376,14 @@ class ExperimentService:
         sql_trial.updated_at = datetime.utcnow()
         self.db.commit()
         self.db.refresh(sql_trial)
+        
+        # Save OpenCap events to CSV if updated and raw_data_path exists
+        if 'opencap_events' in update_data and update_data['opencap_events'] and sql_trial.raw_data_path:
+            self._save_opencap_events_to_csv(
+                update_data['opencap_events'], 
+                sql_trial.raw_data_path
+            )
+        
         return self._sql_trial_to_pydantic(sql_trial)
     
     def delete_trial(self, trial_id: int, soft_delete: bool = True) -> bool:
@@ -524,6 +543,7 @@ class ExperimentService:
             processed_features=processed_features if processed_features else None,
             survey_responses=survey_responses,
             steps=sql_trial.steps,
+            opencap_events=getattr(sql_trial, 'opencap_events', None),  # Safe access for new column
             metabolic_cost=sql_trial.metabolic_cost,
             total_combined_loss=sql_trial.total_combined_loss,
             instability_loss=sql_trial.instability_loss,
@@ -531,4 +551,48 @@ class ExperimentService:
             timestamp=sql_trial.timestamp,
             deleted=sql_trial.deleted_at
         )
+    
+    def _save_opencap_events_to_csv(
+        self, 
+        opencap_events: List[Dict[str, Any]], 
+        raw_data_path: str
+    ) -> Optional[str]:
+        """
+        Save OpenCap events to a CSV file in the same directory as the raw trial data.
+        
+        Args:
+            opencap_events: List of OpenCap event dictionaries
+            raw_data_path: Path to the raw trial data CSV
+            
+        Returns:
+            Path to the saved OpenCap events CSV, or None if failed
+        """
+        if not opencap_events or not raw_data_path:
+            return None
+        
+        try:
+            # Create the OpenCap CSV filename
+            raw_path = Path(raw_data_path)
+            opencap_csv_path = raw_path.parent / f"{raw_path.stem}_opencap_events.csv"
+            
+            # Write events to CSV
+            with open(opencap_csv_path, 'w', newline='') as csvfile:
+                fieldnames = ['event_number', 'timestamp', 'state', 'relativeTime_ms']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                writer.writeheader()
+                for idx, event in enumerate(opencap_events, start=1):
+                    writer.writerow({
+                        'event_number': idx,
+                        'timestamp': event.get('timestamp', ''),
+                        'state': event.get('state', ''),
+                        'relativeTime_ms': event.get('relativeTime', '')
+                    })
+            
+            print(f"✅ Saved OpenCap events to: {opencap_csv_path}")
+            return str(opencap_csv_path)
+            
+        except Exception as e:
+            print(f"⚠️  Failed to save OpenCap events to CSV: {e}")
+            return None
     

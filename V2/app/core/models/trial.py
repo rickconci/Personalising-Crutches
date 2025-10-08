@@ -115,6 +115,7 @@ class TrialBase(BaseModel):
     processed_features: Optional[Dict[str, Any]] = Field(None, description="Processed accelerometer features")
     survey_responses: Optional[SurveyResponse] = Field(None, description="Detailed survey responses")
     steps: Optional[List[float]] = Field(None, description="Detected step timestamps")
+    opencap_events: Optional[List[Dict[str, Any]]] = Field(None, description="OpenCap toggle events: [{timestamp, state, relativeTime}]")
     
     # Metrics
     metabolic_cost: Optional[float] = Field(None, description="Metabolic cost metric")
@@ -142,8 +143,10 @@ class TrialUpdate(BaseModel):
     processed_features: Optional[Dict[str, Any]] = None
     survey_responses: Optional[SurveyResponse] = None
     steps: Optional[List[float]] = None
+    opencap_events: Optional[List[Dict[str, Any]]] = None
     metabolic_cost: Optional[float] = None
     total_combined_loss: Optional[float] = None
+    laps_completed: Optional[float] = None
 
 
 class Trial(TrialBase):
@@ -176,6 +179,7 @@ class TrialResponse(BaseModel):
     processed_features: Optional[Dict[str, Any]] = None
     survey_responses: Optional[SurveyResponse] = None
     steps: Optional[List[float]] = None
+    opencap_events: Optional[List[Dict[str, Any]]] = None
     metabolic_cost: Optional[float] = None
     total_combined_loss: Optional[float] = None
 

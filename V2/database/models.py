@@ -97,6 +97,7 @@ class Trial(Base):
     processed_features = Column(JSON, nullable=True)
     survey_responses = Column(JSON, nullable=True)  # Legacy JSON field for backward compatibility
     steps = Column(JSON, nullable=True)  # List of step timestamps
+    opencap_events = Column(JSON, nullable=True)  # OpenCap toggle events: [{timestamp, state, relativeTime}]
     
     # Detailed survey response columns
     # SUS (System Usability Scale) - 6 questions
@@ -171,6 +172,7 @@ class Trial(Base):
             "processed_features": self.processed_features,
             "survey_responses": self.survey_responses,  # Legacy JSON field
             "steps": self.steps,
+            "opencap_events": self.opencap_events,
             "metabolic_cost": self.metabolic_cost,
             "y_change": self.y_change,
             "y_total": self.y_total,

@@ -306,6 +306,7 @@ export class SystematicMode {
     _getElements() {
         return {
             startStopBtn: document.getElementById('start-stop-btn'),
+            openCapToggleBtn: document.getElementById('opencap-toggle-btn'),
             connectDeviceBtn: document.getElementById('connect-device-btn'),
             uploadBtn: document.getElementById('upload-data-btn'),
             stopwatch: document.getElementById('stopwatch'),
@@ -385,6 +386,11 @@ export class SystematicMode {
             } else {
                 this.startTrial(this.geometrySequencer.getCurrentGeometry());
             }
+        });
+
+        // OpenCap toggle
+        this.elements.openCapToggleBtn?.addEventListener('click', () => {
+            this._handleOpenCapToggle();
         });
 
         // Event delegation for geometry buttons
@@ -645,6 +651,56 @@ export class SystematicMode {
                 this.elements.startStopBtn.classList.add('btn-success');
             }
         }
+
+        // Show/hide and enable/disable OpenCap toggle button
+        if (this.elements.openCapToggleBtn) {
+            if (running) {
+                this.elements.openCapToggleBtn.classList.remove('d-none');
+                this.elements.openCapToggleBtn.disabled = false;
+                // Reset to OFF state
+                this.elements.openCapToggleBtn.dataset.opencapState = 'off';
+                this.elements.openCapToggleBtn.innerHTML = '<i class="fas fa-video"></i> OpenCap OFF';
+                this.elements.openCapToggleBtn.classList.remove('btn-success');
+                this.elements.openCapToggleBtn.classList.add('btn-secondary');
+            } else {
+                this.elements.openCapToggleBtn.classList.add('d-none');
+                this.elements.openCapToggleBtn.disabled = true;
+            }
+        }
+    }
+
+    /**
+     * Handle OpenCap toggle button click
+     * @private
+     */
+    _handleOpenCapToggle() {
+        if (!this.trialRunner.isRunning()) {
+            return;
+        }
+
+        const currentState = this.elements.openCapToggleBtn.dataset.opencapState;
+        const newState = currentState === 'off' ? 'on' : 'off';
+
+        // Record the event in TrialRunner
+        this.trialRunner.recordOpenCapEvent(newState);
+
+        // Update button UI
+        this.elements.openCapToggleBtn.dataset.opencapState = newState;
+        if (newState === 'on') {
+            this.elements.openCapToggleBtn.innerHTML = '<i class="fas fa-video"></i> OpenCap ON';
+            this.elements.openCapToggleBtn.classList.remove('btn-secondary');
+            this.elements.openCapToggleBtn.classList.add('btn-success');
+            this.ui.showNotification('OpenCap recording started', 'success');
+        } else {
+            this.elements.openCapToggleBtn.innerHTML = '<i class="fas fa-video"></i> OpenCap OFF';
+            this.elements.openCapToggleBtn.classList.remove('btn-success');
+            this.elements.openCapToggleBtn.classList.add('btn-secondary');
+            this.ui.showNotification('OpenCap recording stopped', 'info');
+        }
+
+        // Log all events for debugging
+        const events = this.trialRunner.getOpenCapEvents();
+        console.log(`OpenCap events (${events.length} total):`, events);
     }
 
     /**
@@ -827,7 +883,8 @@ export class SystematicMode {
                 instabilityLoss: instabilityLoss,
                 surveyResponses: surveyResponses,
                 metabolicCost: metabolicCost,
-                lapsCompleted: lapsCompleted
+                lapsCompleted: lapsCompleted,
+                openCapEvents: this.trialRunner.getOpenCapEvents()  // Include OpenCap events
             };
 
             console.log('_saveTrial called with currentTrialId:', this.currentTrialId);

@@ -93,7 +93,8 @@ export class SurveyManager {
             instabilityLoss,
             surveyResponses,
             metabolicCost,
-            lapsCompleted
+            lapsCompleted,
+            openCapEvents  // OpenCap toggle events
         } = trialData;
 
         // Validate required fields
@@ -124,7 +125,8 @@ export class SurveyManager {
                     },
                     steps: steps,
                     metabolic_cost: metabolicCost,
-                    laps_completed: lapsCompleted
+                    laps_completed: lapsCompleted,
+                    opencap_events: openCapEvents || []
                 };
 
                 console.log('Updating trial', trialId, 'with payload:', updatePayload);
@@ -160,7 +162,8 @@ export class SurveyManager {
                     },
                     steps: steps,
                     metabolic_cost: metabolicCost,
-                    laps_completed: lapsCompleted
+                    laps_completed: lapsCompleted,
+                    opencap_events: openCapEvents || []
                 };
 
                 console.log('Creating new trial with payload:', createPayload);

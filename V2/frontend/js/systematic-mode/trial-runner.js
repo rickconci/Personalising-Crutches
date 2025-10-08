@@ -13,7 +13,8 @@ export class TrialRunner {
             elapsed: 0,
             running: false,
             testMode: false,
-            rawData: null
+            rawData: null,
+            openCapEvents: []  // Track OpenCap toggle events: [{timestamp, state, relativeTime}]
         };
     }
 
@@ -57,6 +58,7 @@ export class TrialRunner {
             this.state.startTime = Date.now();
             this.state.testMode = testMode;
             this.state.rawData = null;
+            this.state.openCapEvents = [];  // Reset OpenCap events for new trial
 
             if (!testMode) {
                 await this.device.startDataCollection();
@@ -101,7 +103,8 @@ export class TrialRunner {
             return {
                 success: true,
                 rawData: rawData,
-                duration: this.state.elapsed
+                duration: this.state.elapsed,
+                openCapEvents: this.state.openCapEvents  // Include OpenCap events
             };
 
         } catch (error) {
@@ -257,6 +260,37 @@ export class TrialRunner {
 
         console.log(`Generated ${data.length} fake data points over ${duration.toFixed(1)}s`);
         return data;
+    }
+
+    /**
+     * Record an OpenCap toggle event
+     * @param {string} state - 'on' or 'off'
+     */
+    recordOpenCapEvent(state) {
+        if (!this.state.running) {
+            console.warn('Cannot record OpenCap event: trial not running');
+            return;
+        }
+
+        const now = Date.now();
+        const event = {
+            timestamp: now,  // Absolute timestamp
+            state: state,  // 'on' or 'off'
+            relativeTime: now - this.state.startTime  // Milliseconds since trial start
+        };
+
+        this.state.openCapEvents.push(event);
+        console.log(`OpenCap ${state.toUpperCase()} recorded at ${event.relativeTime}ms`, event);
+
+        return event;
+    }
+
+    /**
+     * Get all recorded OpenCap events
+     * @returns {Array} Array of OpenCap events
+     */
+    getOpenCapEvents() {
+        return [...this.state.openCapEvents];
     }
 
     /**
