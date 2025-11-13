@@ -492,10 +492,10 @@ export class SystematicMode {
                 // Normalize scores to 0-1 range (lower is better for all metrics)
                 // SUS: 0-100, lower is worse, so invert: (100 - score) / 100
                 // NRS: 0-10, lower is better, so: score / 10
-                // TLX: 0-100, lower is better, so: score / 100
+                // TLX: 0-20, lower is better, so: score / 20
                 const normalizedSus = (100 - susScore) / 100;
                 const normalizedNrs = nrsScore / 10;
-                const normalizedTlx = tlxScore / 100;
+                const normalizedTlx = tlxScore / 20;
 
                 // Calculate cumulative score (instability loss + normalized surveys)
                 const cumulativeScore = instabilityLoss + normalizedSus + normalizedNrs + normalizedTlx;

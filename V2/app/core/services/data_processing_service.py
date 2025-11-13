@@ -47,6 +47,115 @@ class DataProcessingService:
         self.step_detector = StepDetector()
         self.gait_analyzer = GaitAnalyzer()
     
+    def _encode_geometry_token(self, alpha: Optional[float], beta: Optional[float], gamma: Optional[float]) -> str:
+        """
+        Build geometry token like A85_B95_Gm9 (m for negative gamma, p for positive).
+        
+        Args:
+            alpha: Alpha angle in degrees
+            beta: Beta angle in degrees
+            gamma: Gamma value in degrees
+        
+        Returns:
+            Encoded geometry string token.
+        """
+        # Use integers for compactness
+        a = "A" + (str(int(round(alpha))) if alpha is not None else "na")
+        b = "B" + (str(int(round(beta))) if beta is not None else "na")
+        if gamma is None:
+            g = "Gna"
+        else:
+            sign = "m" if gamma < 0 else ("p" if gamma > 0 else "0")
+            gval = str(int(round(abs(gamma)))) if sign in ("m", "p") else "0"
+            g = f"G{sign}{gval}" if sign in ("m", "p") else "G0"
+        return f"{a}_{b}_{g}"
+    
+    def _parse_existing_trial_numbers(self, files: List[Path]) -> List[Tuple[int, str, Optional[int]]]:
+        """
+        Parse filenames to extract trial number, geometry token and optional repeat index.
+        Expected patterns:
+            trial{n}_{geom}_{HHMMSS}.ext
+            trial{n}_{geom}_{rep}_{HHMMSS}.ext  (when repeated)
+        Returns list of tuples: (n, geom, rep)
+        """
+        results: List[Tuple[int, str, Optional[int]]] = []
+        for f in files:
+            name = f.stem  # without extension
+            parts = name.split("_")
+            if not parts:
+                continue
+            if not parts[0].startswith("trial"):
+                continue
+            try:
+                n = int(parts[0].removeprefix("trial"))
+            except ValueError:
+                continue
+            # geometry token could be three segments combined (Axx_Bxx_G?
+            # We joined using underscores, but our token itself uses underscores.
+            # Structure: trialN + [A..] + [B..] + [G..] + (optional rep) + time
+            # Enforce new scheme strictly: trial + A + B + G + rep + time
+            if len(parts) != 6:
+                continue
+            geom = "_".join(parts[1:4])
+            try:
+                rep = int(parts[4])
+            except ValueError:
+                continue
+            results.append((n, geom, rep))
+        return results
+    
+    def _compute_next_trial_filename(
+        self,
+        directory: Path,
+        alpha: Optional[float],
+        beta: Optional[float],
+        gamma: Optional[float],
+        time_str: str,
+        file_extension: str
+    ) -> str:
+        """
+        Compute next filename using the scheme:
+          trial{n}_{Axx}_{Byy}_{G[m|p]v}[_{rep}]_{HHMMSS}{ext}
+        - n increments with each new recording within directory, unless the previous
+          recording has the same geometry token, in which case reuse n and increment rep.
+        - rep starts at 1 when repeating same geometry consecutively.
+        """
+        geometry_token = self._encode_geometry_token(alpha, beta, gamma)
+        existing_files = sorted(directory.glob("*.csv")) + sorted(directory.glob("*.parquet"))
+        parsed = self._parse_existing_trial_numbers(existing_files)
+        if not parsed:
+            # first recording for this participant/date: start with rep 0
+            return f"trial1_{geometry_token}_0_{time_str}{file_extension}"
+        # Determine most recent by scanning filenames; since we don't have timestamps in a reliable sortable prefix,
+        # we fallback to filesystem modification time to get the last one.
+        last_file: Optional[Path] = None
+        last_mtime = -1.0
+        for f in existing_files:
+            try:
+                mtime = f.stat().st_mtime
+            except OSError:
+                continue
+            if mtime > last_mtime:
+                last_mtime = mtime
+                last_file = f
+        if last_file is None:
+            return f"trial1_{geometry_token}_0_{time_str}{file_extension}"
+        # Parse last file for n, geom, rep
+        last_info = self._parse_existing_trial_numbers([last_file])
+        if not last_info:
+            # If last file doesn't follow pattern, continue incrementing max n
+            max_n = max((n for n, _, _ in parsed), default=0)
+            return f"trial{max_n + 1}_{geometry_token}_{time_str}{file_extension}"
+        last_n, last_geom, last_rep = last_info[0]
+        if last_geom == geometry_token:
+            # same geometry: keep n, bump rep (first occurrence is 0 by definition)
+            next_rep = 0 if last_rep is None else last_rep + 1
+            return f"trial{last_n}_{geometry_token}_{next_rep}_{time_str}{file_extension}"
+        # different geometry: increment n, no rep
+        max_n = max((n for n, _, _ in parsed), default=last_n)
+        # different geometry: increment n and set rep to 0
+        return f"trial{max_n + 1}_{geometry_token}_0_{time_str}{file_extension}"
+    
     def get_participant_data_directory(
         self, 
         participant_name: str, 
@@ -128,13 +237,27 @@ class DataProcessingService:
             date=date_str
         )
         
-        # Generate descriptive filename (date is in directory, so just time in filename)
+        # Generate descriptive filename with new scheme
         file_extension = Path(file.filename).suffix
-        
+        # Determine angles: prefer trial's denormalized fields, fallback to geometry
+        trial_alpha: Optional[float] = None
+        trial_beta: Optional[float] = None
+        trial_gamma: Optional[float] = None
         if trial_id:
-            unique_filename = f"{trial_id}_{geometry_name}_{time_str}{file_extension}"
-        else:
-            unique_filename = f"{time_str}_{file.filename}"
+            trial = self.db.query(Trial).filter(Trial.id == trial_id).first()
+            if trial:
+                trial_alpha = trial.alpha if trial.alpha is not None else (trial.geometry.alpha if trial.geometry else None)
+                trial_beta = trial.beta if trial.beta is not None else (trial.geometry.beta if trial.geometry else None)
+                trial_gamma = trial.gamma if trial.gamma is not None else (trial.geometry.gamma if trial.geometry else None)
+        # Compute filename within participant/date/trials directory
+        unique_filename = self._compute_next_trial_filename(
+            participant_dir,
+            trial_alpha,
+            trial_beta,
+            trial_gamma,
+            time_str,
+            file_extension
+        )
         
         file_path = participant_dir / unique_filename
         

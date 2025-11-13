@@ -158,6 +158,9 @@ class ExperimentService:
         if not include_deleted:
             query = query.filter(SQLTrial.deleted_at.is_(None))
         
+        # Sort by timestamp (oldest first, newest last)
+        query = query.order_by(asc(SQLTrial.timestamp))
+        
         sql_trials = query.offset(skip).limit(limit).all()
         return [self._sql_trial_to_pydantic(t) for t in sql_trials]
     
@@ -503,6 +506,20 @@ class ExperimentService:
         # Construct survey_responses from individual columns
         survey_responses = None
         if any([sql_trial.sus_score, sql_trial.nrs_score, sql_trial.tlx_score]):
+            # Validate and fix tlx_score if it's outside the valid range (0-20)
+            tlx_score = sql_trial.tlx_score
+            if tlx_score is not None and (tlx_score < 0 or tlx_score > 20):
+                # If tlx_score is invalid, recalculate it from individual dimensions
+                if all([sql_trial.tlx_mental_demand, sql_trial.tlx_physical_demand, sql_trial.tlx_performance, 
+                       sql_trial.tlx_effort, sql_trial.tlx_frustration]):
+                    # Recalculate using the same logic as the model
+                    flipped_performance = 20 - sql_trial.tlx_performance
+                    tlx_score = (sql_trial.tlx_mental_demand + sql_trial.tlx_physical_demand + flipped_performance + 
+                               sql_trial.tlx_effort + sql_trial.tlx_frustration) / 5
+                else:
+                    # If we can't recalculate, set to None
+                    tlx_score = None
+            
             survey_responses = {
                 'sus_q1': sql_trial.sus_q1,
                 'sus_q2': sql_trial.sus_q2,
@@ -517,7 +534,7 @@ class ExperimentService:
                 'tlx_performance': sql_trial.tlx_performance,
                 'tlx_effort': sql_trial.tlx_effort,
                 'tlx_frustration': sql_trial.tlx_frustration,
-                'tlx_score': sql_trial.tlx_score
+                'tlx_score': tlx_score
             }
         
         # Construct processed_features from individual columns

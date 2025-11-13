@@ -47,8 +47,10 @@ class SurveyService:
         for field_name in tlx_field_names:
             if field_name in survey_data:
                 tlx_data[field_name] = survey_data[field_name]
-        if 'tlx_score' in survey_data:
-            tlx_data['tlx_score'] = survey_data['tlx_score']
+        
+        # Don't trust the tlx_score from survey_data - we'll calculate it properly
+        # if 'tlx_score' in survey_data:
+        #     tlx_data['tlx_score'] = survey_data['tlx_score']
         
         # Create SurveyResponse object
         survey_response = SurveyResponse(
@@ -68,7 +70,8 @@ class SurveyService:
         ]):
             survey_response.sus_score = survey_response.calculate_sus_score()
         
-        if not survey_response.tlx_score and all([
+        # Always calculate TLX score from individual dimensions to ensure it's correct
+        if all([
             survey_response.tlx_mental_demand, survey_response.tlx_physical_demand,
             survey_response.tlx_performance, survey_response.tlx_effort, survey_response.tlx_frustration
         ]):

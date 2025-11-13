@@ -4,15 +4,27 @@ import struct
 import csv
 from datetime import datetime
 import argparse
+from typing import Optional
 
 # UUID for the characteristic to which we write and read data
 CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb'
 
-async def record_trial_data(output_filename):
+async def record_trial_data(
+    output_filename: str,
+    device_name_prefix: str = "HIP_EXO",
+    device_address: Optional[str] = None,
+) -> None:
     """
     Scans for a BLE device, connects, records data until Enter is pressed,
     and saves the data to a CSV file. This function is designed to be
     imported and called by other parts of the application.
+    
+    Args:
+        output_filename: Path to save the recorded CSV data.
+        device_name_prefix: Prefix to match device name (default: "HIP_EXO").
+                           Matches V2 frontend behavior.
+        device_address: Optional BLE device address to connect directly.
+                       If provided, skips scanning.
     """
     buffer = bytearray()
     recorded_data = []
@@ -81,18 +93,46 @@ async def record_trial_data(output_filename):
             writer.writerows(relative_data)
         print(f"Saved {len(recorded_data)} rows into {filename}")
 
-    target_fragment = "HIP_EXO_V2"
-    print("Scanning for Bluetooth devices...")
-    devices = await BleakScanner.discover()
-    addr = None
-    for d in devices:
-        if d.name and target_fragment in d.name:
-            addr = d.address
-            print(f"Found target: {d.name} [{addr}]")
-            break
-    if not addr:
-        print("...no matching device. Exiting.")
-        return
+    # If address is provided, use it directly
+    if device_address:
+        addr = device_address
+        print(f"Connecting directly to device: {addr}")
+    else:
+        # Scan for devices matching the prefix (same as V2 frontend)
+        print(f"Scanning for Bluetooth devices with prefix '{device_name_prefix}'...")
+        devices = await BleakScanner.discover()
+        addr = None
+        
+        # Find device matching the prefix
+        matching_devices = []
+        for d in devices:
+            if d.name and d.name.startswith(device_name_prefix):
+                matching_devices.append((d.name, d.address))
+        
+        if len(matching_devices) == 0:
+            print(f"❌ No device found with prefix '{device_name_prefix}'.")
+            print("\nDiscovered devices (showing named devices only):")
+            named_devices = [(d.name, d.address) for d in devices if d.name]
+            if named_devices:
+                for name, address in named_devices[:10]:  # Show first 10
+                    print(f"   - {name} [{address}]")
+                if len(named_devices) > 10:
+                    print(f"   ... and {len(named_devices) - 10} more")
+            else:
+                print("   (No named devices found)")
+            print(f"\n💡 Tip: Use --device-address to connect directly, or run scan_ble_devices.py to see all devices")
+            return
+        elif len(matching_devices) == 1:
+            name, addr = matching_devices[0]
+            print(f"✅ Found target: {name} [{addr}]")
+        else:
+            # Multiple matches - use the first one, but warn user
+            name, addr = matching_devices[0]
+            print(f"⚠️  Found {len(matching_devices)} matching device(s), using first:")
+            for i, (n, a) in enumerate(matching_devices, 1):
+                marker = "→" if i == 1 else " "
+                print(f"   {marker} {i}. {n} [{a}]")
+            print(f"\n✅ Connecting to: {name} [{addr}]")
 
     async with BleakClient(addr, timeout=10.0) as client:
         if not client.is_connected:
@@ -109,18 +149,53 @@ async def record_trial_data(output_filename):
     await save_csv(output_filename)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="BLE data recorder for crutch experiments.")
+    parser = argparse.ArgumentParser(
+        description="BLE data recorder for crutch experiments.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use default device name prefix (HIP_EXO)
+  python ble_MCU_2.py --filename trial_1.csv
+
+  # Connect to a specific device by address
+  python ble_MCU_2.py --device-address AA:BB:CC:DD:EE:FF
+
+  # Use a different device name prefix
+  python ble_MCU_2.py --device-prefix MY_DEVICE
+
+  # Scan for all devices first (use scan_ble_devices.py)
+  python scan_ble_devices.py
+        """
+    )
     parser.add_argument(
         "--filename",
         type=str,
         default="recorded_data.csv",
-        help="The path to save the recorded CSV data."
+        help="The path to save the recorded CSV data (default: recorded_data.csv)."
+    )
+    parser.add_argument(
+        "--device-prefix",
+        type=str,
+        default="HIP_EXO",
+        help="Device name prefix to search for (default: HIP_EXO, matches V2 frontend)."
+    )
+    parser.add_argument(
+        "--device-address",
+        type=str,
+        default=None,
+        help="BLE device address to connect directly (skips scanning). Format: XX:XX:XX:XX:XX:XX"
     )
     args = parser.parse_args()
 
     try:
-        asyncio.run(record_trial_data(args.filename))
+        asyncio.run(record_trial_data(
+            args.filename,
+            device_name_prefix=args.device_prefix,
+            device_address=args.device_address
+        ))
     except KeyboardInterrupt:
         print("\nProgram interrupted by user.")
     except Exception as e:
         print(f"An error occurred: {e}")
+        import traceback
+        traceback.print_exc()

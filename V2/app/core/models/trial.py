@@ -39,7 +39,7 @@ class SurveyResponse(BaseModel):
     tlx_performance: Optional[int] = Field(None, ge=0, le=20, description="TLX: Performance success")
     tlx_effort: Optional[int] = Field(None, ge=0, le=20, description="TLX: Effort required")
     tlx_frustration: Optional[int] = Field(None, ge=0, le=20, description="TLX: Frustration level")
-    tlx_score: Optional[int] = Field(None, ge=0, le=100, description="Calculated TLX score (0-100)")
+    tlx_score: Optional[float] = Field(None, ge=0, le=20, description="Calculated TLX score (0-20, mean of dimensions)")
     
     # Legacy fields for backward compatibility
     effort_survey_answer: Optional[int] = Field(None, ge=0, le=6, description="Legacy effort rating (0-6)")
@@ -87,14 +87,22 @@ class SurveyResponse(BaseModel):
         )
         return (sus_score / 24) * 100
     
-    def calculate_tlx_score(self) -> Optional[int]:
-        """Calculate TLX score from individual question responses."""
+    def calculate_tlx_score(self) -> Optional[float]:
+        """Calculate TLX score from individual question responses.
+        
+        Uses mean of all dimensions and flips performance so that higher performance
+        results in lower workload (better performance = less mental load).
+        """
         if not all([self.tlx_mental_demand, self.tlx_physical_demand, self.tlx_performance, 
                    self.tlx_effort, self.tlx_frustration]):
             return None
         
-        return (self.tlx_mental_demand + self.tlx_physical_demand + self.tlx_performance + 
-                self.tlx_effort + self.tlx_frustration)
+        # Flip performance so that high performance = low workload
+        flipped_performance = 20 - self.tlx_performance
+        
+        # Calculate mean of all TLX dimensions (0-20 each, so mean is 0-20)
+        return (self.tlx_mental_demand + self.tlx_physical_demand + flipped_performance + 
+                self.tlx_effort + self.tlx_frustration) / 5
 
 
 class TrialBase(BaseModel):

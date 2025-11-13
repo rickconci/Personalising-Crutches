@@ -34,23 +34,11 @@ export class UIRenderer {
             return;
         }
 
-        // Sort trials: Control first, then by G-number
+        // Sort trials by timestamp (oldest first, newest last)
         participantTrials.sort((a, b) => {
-            const aIsControl = a.geometry_name === 'Control';
-            const bIsControl = b.geometry_name === 'Control';
-            if (aIsControl && !bIsControl) return -1;
-            if (!aIsControl && bIsControl) return 1;
-
-            const aGeomName = a.geometry_name || '';
-            const bGeomName = b.geometry_name || '';
-
-            if (aGeomName.startsWith('G') && bGeomName.startsWith('G')) {
-                const aNum = parseInt(aGeomName.substring(1)) || 0;
-                const bNum = parseInt(bGeomName.substring(1)) || 0;
-                return aNum - bNum;
-            }
-
-            return aGeomName.localeCompare(bGeomName);
+            const aTime = new Date(a.timestamp);
+            const bTime = new Date(b.timestamp);
+            return aTime - bTime; // Oldest first
         });
 
         participantTrials.forEach((trial, index) => {
@@ -334,7 +322,7 @@ export class UIRenderer {
                     const breakdown = `Instability: ${(d.instability_loss || 0).toFixed(4)}<br>` +
                         `SUS: ${d.sus_score || 0}/100<br>` +
                         `NRS: ${d.nrs_score || 0}/10<br>` +
-                        `TLX: ${d.tlx_score || 0}/100<br>` +
+                        `TLX: ${d.tlx_score || 0}/20<br>` +
                         `Cumulative: ${(d.cumulative_score || 0).toFixed(4)}`;
                     return `Trial: ${d.geometry_name}<br>${breakdown}`;
                 }),

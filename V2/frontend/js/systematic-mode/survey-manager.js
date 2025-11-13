@@ -54,11 +54,17 @@ export class SurveyManager {
             if (index < tlxFieldNames.length) {
                 surveyResponses[tlxFieldNames[index]] = value;
             }
-            tlxScore += value;
-        });
-        surveyResponses['tlx_score'] = tlxScore; // Already on 0-100 scale
 
-        console.log(`TLX: ${tlxQuestions.length} questions, total score: ${tlxScore}`);
+            // Flip performance so that high performance = low workload
+            if (tlxFieldNames[index] === 'tlx_performance') {
+                tlxScore += (20 - value);
+            } else {
+                tlxScore += value;
+            }
+        });
+        surveyResponses['tlx_score'] = tlxScore / 5; // Mean of all dimensions (0-20 scale)
+
+        console.log(`TLX: ${tlxQuestions.length} questions, mean score: ${surveyResponses['tlx_score']}`);
         console.log('TLX breakdown:', {
             mental_demand: surveyResponses['tlx_mental_demand'],
             physical_demand: surveyResponses['tlx_physical_demand'],
@@ -262,18 +268,25 @@ export class SurveyManager {
 
     /**
      * Calculate TLX score preview
-     * @returns {number} - Calculated TLX score (0-100)
+     * @returns {number} - Calculated TLX score (0-20, mean of dimensions)
      */
     calculateTLXScorePreview() {
         const tlxQuestions = document.querySelectorAll('.tlx-question');
+        const tlxFieldNames = ['tlx_mental_demand', 'tlx_physical_demand', 'tlx_performance', 'tlx_effort', 'tlx_frustration'];
         let tlxScore = 0;
 
-        tlxQuestions.forEach((q) => {
+        tlxQuestions.forEach((q, index) => {
             const value = parseInt(q.value) || 10;
-            tlxScore += value;
+
+            // Flip performance so that high performance = low workload
+            if (index < tlxFieldNames.length && tlxFieldNames[index] === 'tlx_performance') {
+                tlxScore += (20 - value);
+            } else {
+                tlxScore += value;
+            }
         });
 
-        return tlxScore;
+        return tlxScore / 5; // Mean of all dimensions (0-20 scale)
     }
 }
 

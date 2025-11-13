@@ -1,0 +1,14 @@
+{"Control": {"alpha": 95.0, "beta": 95.0, "gamma": 0.0}, 
+"G5": {"alpha": 85.0, "beta": 125.0, "gamma": 0.0}, 
+"G6": {"alpha": 85.0, "beta": 125.0, "gamma": 0.0}, 
+"G8": {"alpha": 105.0, "beta": 125.0, "gamma": 0.0}, 
+"G7": {"alpha": 105.0, "beta": 95.0, "gamma": 0.0}, 
+"G11": {"alpha": 105.0, "beta": 95.0, "gamma": 9.0}, 
+"G12": {"alpha": 105.0, "beta": 125.0, "gamma": 9.0}, 
+"G10": {"alpha": 85.0, "beta": 125.0, "gamma": 9.0}, 
+"G9": {"alpha": 85.0, "beta": 95.0, "gamma": 9.0}, 
+"G1": {"alpha": 85.0, "beta": 95.0, "gamma": -9.0}, 
+"G2": {"alpha": 85.0, "beta": 125.0, "gamma": -9.0}, 
+"G4": {"alpha": 105.0, "beta": 125.0, "gamma": -9.0}, 
+"G3": {"alpha": 105.0, "beta": 95.0, "gamma": -9.0}
+}

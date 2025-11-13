@@ -309,13 +309,21 @@ class CrutchApp {
                 height: parseFloat(document.getElementById('char-height')?.value) || null,
                 weight: parseFloat(document.getElementById('char-weight')?.value) || null,
                 forearm_length: parseFloat(document.getElementById('char-forearm')?.value) || null,
-                fitness_level: parseInt(document.getElementById('char-activity')?.value) || null,
+                fitness_level: document.getElementById('char-activity')?.value || null,
                 age: parseInt(document.getElementById('char-age')?.value) || null,
                 sex: document.getElementById('char-sex')?.value || null,
-                activity_level: parseInt(document.getElementById('char-activity-level')?.value) || null,
-                previous_crutch_experience: document.getElementById('char-crutch-exp')?.checked || false
+                activity_level: (() => {
+                    const value = document.getElementById('char-activity')?.value;
+                    if (!value || value === '-- Select --') return null;
+                    const levelMap = { 'very-low': 1, 'low': 2, 'medium': 3, 'high': 4 };
+                    return levelMap[value] || null;
+                })(),
+                previous_crutch_experience: document.querySelector('input[name="crutch-experience"]:checked')?.value === 'true'
             }
         };
+
+        // Debug: Log the participant data being sent
+        console.log('Participant data being sent:', participantData);
 
         // Validate required fields
         if (!participantData.name) {
