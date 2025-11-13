@@ -1,0 +1,25 @@
+# Database Connection Configuration
+# Copy this file to your home directory as ~/dot_env.txt
+# The application will automatically use this database connection
+
+render_hostname: dpg-d4al5sk9c44c738k6jg0-a
+Port: 5432
+Database: crutches
+username: crutches_user
+Password: 8DcbqkW0GjGX3xgvxcQo3tYf1tOGfThu
+external db url: postgresql://crutches_user:8DcbqkW0GjGX3xgvxcQo3tYf1tOGfThu@dpg-d4al5sk9c44c738k6jg0-a.virginia-postgres.render.com/crutches
+PSQL command:
+PGPASSWORD=8DcbqkW0GjGX3xgvxcQo3tYf1tOGfThu psql -h dpg-d4al5sk9c44c738k6jg0-a.virginia-postgres.render.com -U crutches_user crutches
+
+DATA_DIRECTORY=../data_V2
+RAW_DATA_DIRECTORY=../data_V2/raw
+PROCESSED_DATA_DIRECTORY=../data_V2/processed
+RESULTS_DIRECTORY=../data_V2/results
+PLOTS_DIRECTORY=../data_V2/plots
+
+DATABASE_URL=sqlite:///./experiments.db
+
+API_HOST=0.0.0.0
+API_PORT=8000
+DEBUG=false
+
