@@ -46,14 +46,19 @@ class ExperimentService:
     
     def create_participant(self, participant_data: ParticipantCreate) -> Participant:
         """Create a new participant."""
-        sql_participant = SQLParticipant(
-            name=participant_data.name,
-            characteristics=participant_data.characteristics
-        )
-        self.db.add(sql_participant)
-        self.db.commit()
-        self.db.refresh(sql_participant)
-        return self._sql_participant_to_pydantic(sql_participant)
+        try:
+            sql_participant = SQLParticipant(
+                name=participant_data.name,
+                characteristics=participant_data.characteristics
+            )
+            self.db.add(sql_participant)
+            self.db.commit()
+            self.db.refresh(sql_participant)
+            return self._sql_participant_to_pydantic(sql_participant)
+        except Exception as e:
+            self.db.rollback()
+            # Re-raise with more context
+            raise ValueError(f"Failed to create participant: {str(e)}") from e
     
     def update_participant(self, participant_id: int, participant_data: ParticipantUpdate) -> Optional[Participant]:
         """Update a participant."""
@@ -546,9 +551,15 @@ class ExperimentService:
         if sql_trial.instability_loss is not None:
             processed_features['instability_loss'] = sql_trial.instability_loss
         
+        # Get participant name
+        participant_name = None
+        if sql_trial.participant:
+            participant_name = sql_trial.participant.name
+        
         return Trial(
             id=sql_trial.id,
             participant_id=sql_trial.participant_id,
+            participant_name=participant_name,
             geometry_id=sql_trial.geometry_id,
             geometry_name=geometry_name,
             alpha=alpha,

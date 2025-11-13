@@ -8,17 +8,128 @@ This module centralizes all configuration settings, including:
 - Data processing parameters
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, model_validator
+from pathlib import Path
+import os
 import numpy as np
+
+
+def get_config_from_home_file() -> Dict[str, str]:
+    """
+    Read all configuration from ~/dot_env.txt file.
+    
+    Supports two formats:
+    1. KEY=VALUE (standard env var format)
+    2. external db url: VALUE (special format for database URL)
+    
+    Returns:
+        Dictionary of configuration values
+    """
+    home_dir = Path.home()
+    dot_env_file = home_dir / "dot_env.txt"
+    
+    config = {}
+    
+    if not dot_env_file.exists():
+        return config
+    
+    try:
+        # First pass: Handle special "external db url:" format (takes precedence)
+        with open(dot_env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Handle special "external db url:" format (takes precedence over DATABASE_URL=)
+                if line.startswith("external db url:"):
+                    url = line.split(":", 1)[1].strip()
+                    if url:
+                        config["DATABASE_URL"] = url
+                        break  # Found it, can stop looking
+        
+        # Second pass: Handle standard KEY=VALUE format
+        with open(dot_env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Skip "external db url:" line (already processed)
+                if line.startswith("external db url:"):
+                    continue
+                
+                # Handle standard KEY=VALUE format
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    if key and value:
+                        # Don't overwrite DATABASE_URL if it was set by "external db url:"
+                        if key == "DATABASE_URL" and "DATABASE_URL" in config:
+                            continue
+                        config[key] = value
+    except Exception:
+        # If file exists but can't be read, silently fail
+        pass
+    
+    return config
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Database
+    # Priority: 1) ~/dot_env.txt, 2) DATABASE_URL env var, 3) .env file, 4) default SQLite
     database_url: str = Field(default="sqlite:///./experiments.db", env="DATABASE_URL")
+    
+    @model_validator(mode='before')
+    @classmethod
+    def load_from_home_file(cls, data: Any) -> Any:
+        """
+        Load configuration from ~/dot_env.txt file.
+        
+        Priority order:
+        1. Environment variables (highest priority)
+        2. ~/dot_env.txt file (all settings)
+        3. .env file in project directory
+        4. Default values
+        """
+        # Convert to dict if needed
+        if not isinstance(data, dict):
+            data = {}
+        
+        # Get all config from ~/dot_env.txt
+        home_config = get_config_from_home_file()
+        
+        # Apply home file config, but don't override existing values (env vars have priority)
+        for key, value in home_config.items():
+            # Convert KEY to field name (DATABASE_URL -> database_url)
+            field_name = key.lower()
+            
+            # Only set if not already set (env vars have priority)
+            if field_name not in data or (field_name == "database_url" and data[field_name] == "sqlite:///./experiments.db"):
+                # Special handling for database_url default
+                if field_name == "database_url" and value:
+                    data[field_name] = value
+                elif field_name == "debug":
+                    # Convert string to boolean
+                    data[field_name] = value.lower() in ("true", "1", "yes", "on")
+                elif field_name == "api_port":
+                    # Convert string to int
+                    try:
+                        data[field_name] = int(value)
+                    except (ValueError, TypeError):
+                        pass  # Keep default if conversion fails
+                elif field_name in ["data_directory", "raw_data_directory", "processed_data_directory", 
+                                   "results_directory", "plots_directory", "api_host"]:
+                    data[field_name] = value
+        
+        return data
     
     # Data directories
     data_directory: str = Field(default="data", env="DATA_DIRECTORY")

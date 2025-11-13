@@ -38,7 +38,14 @@ async def create_participant(
     service: ExperimentService = Depends(get_experiment_service)
 ):
     """Create a new participant."""
-    return service.create_participant(participant)
+    try:
+        return service.create_participant(participant)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to create participant: {str(e)}")
 
 @router.get("/participants/{participant_id}", response_model=Participant)
 async def get_participant(

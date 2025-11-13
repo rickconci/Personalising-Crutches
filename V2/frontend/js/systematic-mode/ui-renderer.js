@@ -71,8 +71,14 @@ export class UIRenderer {
         // Get participant characteristics
         const characteristics = participant.characteristics || {};
 
+        // Get participant name from trial data or participant object
+        const participantName = trial.participant_name || participant?.name || '-';
+        const participantId = trial.participant_id || participant?.id || '-';
+
         row.innerHTML = `
             <td>${trialNumber}</td>
+            <td>${participantId}</td>
+            <td>${participantName}</td>
             <td>${trial.geometry_name || 'Unknown'}</td>
             <td>${trial.alpha ?? '-'}°</td>
             <td>${trial.beta ?? '-'}°</td>

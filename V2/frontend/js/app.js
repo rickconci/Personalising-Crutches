@@ -326,10 +326,13 @@ class CrutchApp {
         console.log('Participant data being sent:', participantData);
 
         // Validate required fields
-        if (!participantData.name) {
-            this.modules.ui.showNotification('Please enter a participant ID', 'warning');
+        if (!participantData.name || !participantData.name.trim()) {
+            this.modules.ui.showNotification('Please enter a Participant ID/Code', 'warning');
             return;
         }
+
+        // Trim whitespace from name
+        participantData.name = participantData.name.trim().toUpperCase();
 
         try {
             const newParticipant = await this.modules.api.createParticipant(participantData);

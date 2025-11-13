@@ -590,6 +590,8 @@
                                     <thead class="table-light sticky-top">
                                         <tr>
                                             <th>Trial #</th>
+                                            <th>Participant ID</th>
+                                            <th>Participant Name</th>
                                             <th>Geometry</th>
                                             <th>α</th>
                                             <th>β</th>
@@ -1893,8 +1895,11 @@
                     <form id="new-participant-form">
                         <div class="row g-3 mb-3">
                             <div class="col-12">
-                                <label for="new-participant-name" class="form-label">Full Name</label>
-                                <input type="text" id="new-participant-name" class="form-control" required>
+                                <label for="new-participant-name" class="form-label">Participant ID / Code</label>
+                                <input type="text" id="new-participant-name" class="form-control"
+                                    placeholder="e.g., MIH1, P001, Subject_123" required>
+                                <small class="form-text text-muted">Use a participant code/identifier (e.g., MIH1, P001)
+                                    rather than full name</small>
                             </div>
                         </div>
                         <hr>

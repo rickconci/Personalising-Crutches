@@ -18,8 +18,8 @@ class Participant(Base):
     
     __tablename__ = "participants"
     
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False, index=True)  # Used as Participant ID (e.g., P001, Subject_123)
+    id = Column(Integer, primary_key=True, index=True)  # Auto-increment database ID
+    name = Column(String(100), nullable=False, index=True)  # Participant ID/Code (e.g., MIH1, P001, Subject_123)
     characteristics = Column(JSON, nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=True)

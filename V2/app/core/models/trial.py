@@ -160,6 +160,7 @@ class TrialUpdate(BaseModel):
 class Trial(TrialBase):
     """Complete trial model with database fields."""
     id: int = Field(..., description="Unique trial identifier")
+    participant_name: Optional[str] = Field(None, description="Participant ID/Code (e.g., MIH1, P001)")
     geometry_name: Optional[str] = Field(None, description="Geometry name")
     timestamp: datetime = Field(..., description="Trial timestamp")
     deleted: Optional[datetime] = Field(None, description="Soft delete timestamp")
