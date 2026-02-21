@@ -18,16 +18,23 @@ export class UIRenderer {
             return;
         }
 
+        // Filter trials for this participant (show ALL trials, not just grid_search)
         const participantTrials = trials?.filter(t =>
-            t.participant_id === participant.id &&
-            this._isGridSearchTrial(t)
+            t.participant_id === participant.id
         ) || [];
+
+        console.log(`[renderTrialsTable] Participant ID: ${participant.id}`);
+        console.log(`[renderTrialsTable] Total trials from API: ${trials?.length || 0}`);
+        console.log(`[renderTrialsTable] Filtered participant trials: ${participantTrials.length}`);
+        if (participantTrials.length > 0) {
+            console.log(`[renderTrialsTable] Trial sources:`, participantTrials.map(t => ({ id: t.id, source: t.source, timestamp: t.timestamp })));
+        }
 
         tableBody.innerHTML = '';
 
         if (participantTrials.length === 0) {
             tableBody.innerHTML = `
-                <tr><td colspan="20" class="text-center text-muted">
+                <tr><td colspan="21" class="text-center text-muted">
                     No trials recorded yet for this participant.
                 </td></tr>
             `;
@@ -42,6 +49,16 @@ export class UIRenderer {
         });
 
         participantTrials.forEach((trial, index) => {
+            // Debug: log laps data for this trial
+            if (index === 0) {
+                console.log(`[renderTrialsTable] Sample trial laps data:`, {
+                    id: trial.id,
+                    laps_completed: trial.laps_completed,
+                    laps: trial.laps,
+                    has_laps_completed: 'laps_completed' in trial,
+                    has_laps: 'laps' in trial
+                });
+            }
             const row = this._createTrialRow(trial, index, participant);
             tableBody.appendChild(row);
         });
@@ -104,7 +121,11 @@ export class UIRenderer {
                 this.ui.formatNumber(trial.survey_responses.tlx_score) : '-'}</td>
             <td>${trial.metabolic_cost !== undefined ?
                 this.ui.formatNumber(trial.metabolic_cost) : '-'}</td>
-            <td>
+            <td class="laps-column">${(trial.laps_completed != null && !isNaN(trial.laps_completed)) ?
+                this.ui.formatNumber(trial.laps_completed, 2) :
+                ((trial.laps != null && !isNaN(trial.laps)) ?
+                    this.ui.formatNumber(trial.laps, 2) : '-')}</td>
+            <td class="actions-column">
                 <button class="btn btn-sm btn-outline-primary" 
                         onclick="window.app.modules.systematic.viewTrialDetails(${trial.id})">
                     <i class="fas fa-eye"></i>

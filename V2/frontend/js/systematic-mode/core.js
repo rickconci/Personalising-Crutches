@@ -460,17 +460,24 @@ export class SystematicMode {
      */
     async _loadParticipantData(participantId) {
         try {
-            console.log('Loading participant data for ID:', participantId);
+            console.log('[SystematicMode] Loading participant data for ID:', participantId);
 
             const [participantData, allTrials, allGeometries] = await Promise.all([
                 this.api.request(`/experiments/participants/${participantId}`),
-                this.api.getTrials(),
+                this.api.getTrials(participantId),  // Filter by participant_id in API call
                 this.api.getGeometries()
             ]);
 
-            console.log('Participant API response:', participantData);
-            console.log('Trials loaded:', allTrials.length);
-            console.log('Geometries loaded:', allGeometries.length);
+            console.log('[SystematicMode] Participant API response:', participantData);
+            console.log('[SystematicMode] Trials loaded:', allTrials.length);
+            console.log('[SystematicMode] Trials data:', allTrials.map(t => ({
+                id: t.id,
+                participant_id: t.participant_id,
+                source: t.source,
+                geometry_name: t.geometry_name,
+                timestamp: t.timestamp
+            })));
+            console.log('[SystematicMode] Geometries loaded:', allGeometries.length);
 
             this.currentParticipant = participantData;
             this.trials = allTrials;

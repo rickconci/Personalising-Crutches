@@ -309,7 +309,7 @@ class CrutchApp {
                 height: parseFloat(document.getElementById('char-height')?.value) || null,
                 weight: parseFloat(document.getElementById('char-weight')?.value) || null,
                 forearm_length: parseFloat(document.getElementById('char-forearm')?.value) || null,
-                fitness_level: document.getElementById('char-activity')?.value || null,
+                fitness_level: null,  // No fitness level field in form
                 age: parseInt(document.getElementById('char-age')?.value) || null,
                 sex: document.getElementById('char-sex')?.value || null,
                 activity_level: (() => {

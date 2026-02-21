@@ -21,3 +21,11 @@ OldScripts/
 *.db-journal
 *.sqlite
 *.sqlite3
+
+
+V1/
+
+GP_visualizations/
+data/
+V2/docs/
+hole_location_optimization/

@@ -140,7 +140,7 @@ async def update_geometry(
 async def get_trials(
     participant_id: Optional[int] = None,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 1000,  # Increased limit to ensure all trials are returned
     service: ExperimentService = Depends(get_experiment_service)
 ):
     """Get trials, optionally filtered by participant."""
