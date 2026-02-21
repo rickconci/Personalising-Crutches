@@ -1,12 +1,13 @@
 data_V1/
 data_V2/
 README.md
+dot_env.txt
 __pycache__/
 .DS_Store
 .venv/
 venv/
 env/
-#dot_env.txt
+dot_env.txt
 
 *.BIN
 *.xlsx
