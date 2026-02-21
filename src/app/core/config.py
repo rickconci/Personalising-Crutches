@@ -15,10 +15,13 @@ from pathlib import Path
 import os
 import numpy as np
 
+# Project base = directory containing src (Personalising-Crutches). Config lives at project_base/dot_env.txt.
+_PROJECT_BASE = Path(__file__).resolve().parent.parent.parent.parent
 
-def get_config_from_home_file() -> Dict[str, str]:
+
+def get_config_from_project_file() -> Dict[str, str]:
     """
-    Read all configuration from ~/dot_env.txt file.
+    Read all configuration from dot_env.txt at the project base (directory containing src/V2).
     
     Supports two formats:
     1. KEY=VALUE (standard env var format)
@@ -27,8 +30,7 @@ def get_config_from_home_file() -> Dict[str, str]:
     Returns:
         Dictionary of configuration values
     """
-    home_dir = Path.home()
-    dot_env_file = home_dir / "dot_env.txt"
+    dot_env_file = _PROJECT_BASE / "dot_env.txt"
     
     config = {}
     
@@ -84,18 +86,18 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Database
-    # Priority: 1) ~/dot_env.txt, 2) DATABASE_URL env var, 3) .env file, 4) default SQLite
+    # Priority: 1) project base dot_env.txt, 2) DATABASE_URL env var, 3) .env file, 4) default SQLite
     database_url: str = Field(default="sqlite:///./experiments.db", env="DATABASE_URL")
     
     @model_validator(mode='before')
     @classmethod
     def load_from_home_file(cls, data: Any) -> Any:
         """
-        Load configuration from ~/dot_env.txt file.
+        Load configuration from dot_env.txt at project base (directory containing src).
         
         Priority order:
         1. Environment variables (highest priority)
-        2. ~/dot_env.txt file (all settings)
+        2. dot_env.txt at project base (all settings)
         3. .env file in project directory
         4. Default values
         """
@@ -103,8 +105,8 @@ class Settings(BaseSettings):
         if not isinstance(data, dict):
             data = {}
         
-        # Get all config from ~/dot_env.txt
-        home_config = get_config_from_home_file()
+        # Get all config from project base dot_env.txt
+        home_config = get_config_from_project_file()
         
         # Apply home file config, but don't override existing values (env vars have priority)
         for key, value in home_config.items():

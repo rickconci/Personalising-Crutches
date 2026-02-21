@@ -227,9 +227,9 @@ fi
 echo ""
 echo -e "${BLUE}🔍 Checking database connection...${NC}"
 
-# Check if ~/dot_env.txt exists
-if [ -f ~/dot_env.txt ]; then
-    echo -e "${GREEN}✅ Found shared database configuration (~/dot_env.txt)${NC}"
+# App reads dot_env.txt from project base (directory containing src)
+if [ -f "$PROJECT_ROOT/../dot_env.txt" ]; then
+    echo -e "${GREEN}✅ Found database configuration (project base dot_env.txt)${NC}"
 fi
 
 # Try to check PostgreSQL connection

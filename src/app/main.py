@@ -51,10 +51,6 @@ async def root():
     else:
         return {"message": "Personalising Crutches API", "version": "0.1.0"}
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "version": "0.1.0"}
 
 # Create necessary directories
 def create_directories():
