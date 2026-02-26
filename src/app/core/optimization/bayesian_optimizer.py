@@ -8,9 +8,8 @@ consolidating the optimization logic from the original codebase.
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
 from enum import Enum
-
+from pydantic import BaseModel, Field
 try:
     import GPy
     from GPyOpt.methods import BayesianOptimization
@@ -30,14 +29,16 @@ class AcquisitionFunction(str, Enum):
     UPPER_CONFIDENCE_BOUND = "UCB"
 
 
-@dataclass
-class OptimizationResult:
+
+class OptimizationResult(BaseModel):
     """Result of Bayesian optimization."""
-    suggested_geometry: Dict[str, float]
-    confidence: Optional[float] = None
-    acquisition_value: Optional[float] = None
-    optimization_history: Optional[pd.DataFrame] = None
-    processing_time: float = 0.0
+    suggested_geometry: Dict[str, float] = Field(..., description="Suggested crutch geometry")
+    confidence: Optional[float] = Field(None, description="Confidence score")
+    acquisition_value: Optional[float] = Field(None, description="Acquisition function value")
+    optimization_history: Optional[List[Dict[str, Any]]] = Field(
+        None, description="Optimization history as list of records"
+    )
+    processing_time: float = Field(0.0, description="Processing time")
 
 
 class BayesianOptimizer:
@@ -144,7 +145,7 @@ class BayesianOptimizer:
             suggested_geometry=suggested_geometry,
             confidence=acquisition_value,
             acquisition_value=acquisition_value,
-            optimization_history=experiment_data,
+            optimization_history=experiment_data.to_dict(orient="records") if experiment_data is not None else None,
             processing_time=processing_time
         )
     

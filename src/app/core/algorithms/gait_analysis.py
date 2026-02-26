@@ -120,9 +120,18 @@ class GaitAnalyzer:
             else None
         )
         
-        # Movement metrics
+        # Movement metrics (only for columns that exist; device may send only acc_x + acc_z)
         metrics = self._calculate_metrics(data, step_times)
-        
+        def _get_change_total(metrics_dict: Optional[Dict], key: str) -> tuple[float, float]:
+            if not metrics_dict or key not in metrics_dict or metrics_dict[key] is None:
+                return 0.0, 0.0
+            m = metrics_dict[key]
+            return float(m.get("change", 0.0)), float(m.get("total", 0.0))
+
+        x_change, x_total = _get_change_total(metrics, "acc_x_data")
+        y_change, y_total = _get_change_total(metrics, "acc_y_data")
+        z_change, z_total = _get_change_total(metrics, "acc_z_data")
+
         # RMS load cell force
         rms_load_cell_force = self._calculate_rms_force(force_data) if force_data is not None else None
         
@@ -131,46 +140,43 @@ class GaitAnalyzer:
         
         return GaitMetrics(
             step_count=step_count,
-            step_variance=step_variance,
-            y_change=metrics['acc_y_data']['change'],
-            y_total=metrics['acc_y_data']['total'],
-            x_change=metrics['acc_x_data']['change'],
-            x_total=metrics['acc_x_data']['total'],
-            z_change=metrics['acc_z_data']['change'],
-            z_total=metrics['acc_z_data']['total'],
-            rms_load_cell_force=rms_load_cell_force,
-            step_frequency=step_frequency,
-            step_regularity=step_regularity,
-            step_symmetry=step_symmetry
+            step_variance=step_variance if step_variance is not None else 0.0,
+            y_change=y_change,
+            y_total=y_total,
+            x_change=x_change,
+            x_total=x_total,
+            z_change=z_change,
+            z_total=z_total,
+            rms_load_cell_force=rms_load_cell_force if rms_load_cell_force is not None else 0.0,
+            step_frequency=step_frequency if step_frequency is not None else 0.0,
+            step_regularity=step_regularity if step_regularity is not None else 0.0,
+            step_symmetry=step_symmetry if step_symmetry is not None else 0.0
         )
     
-    def _calculate_metrics(self, data: pd.DataFrame, step_times: np.ndarray) -> tuple[Optional[float], Optional[float]]:
+    def _calculate_metrics(self, data: pd.DataFrame, step_times: np.ndarray) -> Optional[Dict[str, Dict[str, float]]]:
         """
-        Calculate movement metrics.
+        Calculate movement metrics for each axis present in data.
+        Only axes present in data.columns are computed (e.g. device may omit acc_y_data).
         
         Args:
             data: Accelerometer data
             step_times: Step timestamps
             
         Returns:
-            Dictionary of movement metrics
+            Dictionary mapping column name to {'change', 'total'}, or None if no axis present
         """
-        metrics = {
-            'acc_x_data': [],
-            'acc_y_data': [],
-            'acc_z_data': []
-        }
+        metrics: Dict[str, Dict[str, float]] = {}
         for col in ['acc_x_data', 'acc_y_data', 'acc_z_data']:
             if col not in data.columns:
-                return None
+                continue
             acc_data = data[col].values
             acc_change = np.sum(np.abs(np.diff(acc_data)))
             acc_total = np.sum(np.abs(acc_data - np.mean(acc_data)))
             metrics[col] = {
-                'change': acc_change,
-                'total': acc_total
+                'change': float(acc_change),
+                'total': float(acc_total)
             }
-        return metrics
+        return metrics if metrics else None
         
     def _calculate_rms_force(self, force_data: np.ndarray) -> Optional[float]:
         """

@@ -9,6 +9,9 @@ venv/
 env/
 dot_env.txt
 
+
+__pycache__/
+
 *.BIN
 *.xlsx
 Device_documents/

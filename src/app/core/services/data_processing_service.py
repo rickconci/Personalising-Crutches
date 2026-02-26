@@ -260,17 +260,18 @@ class DataProcessingService:
         )
         
         file_path = participant_dir / unique_filename
-        
+        file_path_absolute = file_path.resolve()
+
         # Save file
-        with open(file_path, "wb") as buffer:
+        with open(file_path_absolute, "wb") as buffer:
             content = await file.read()
             buffer.write(content)
         
-        # Create database record
+        # Create database record (store absolute path so process finds file regardless of cwd)
         data_file = DataFile(
             filename=unique_filename,
             original_filename=file.filename,
-            file_path=str(file_path),
+            file_path=str(file_path_absolute),
             file_size=len(content),
             file_type=file_extension[1:].lower(),
             trial_id=trial_id
@@ -282,7 +283,7 @@ class DataProcessingService:
         if trial_id:
             trial = self.db.query(Trial).filter(Trial.id == trial_id).first()
             if trial:
-                trial.raw_data_path = str(file_path)
+                trial.raw_data_path = str(file_path_absolute)
         
         self.db.commit()
         self.db.refresh(data_file)
@@ -526,12 +527,14 @@ class DataProcessingService:
         Load data file based on file type.
         
         Args:
-            file_path: Path to the data file
+            file_path: Path to the data file (absolute or relative to raw_data_directory)
             
         Returns:
             Loaded data as DataFrame
         """
         file_path = Path(file_path)
+        if not file_path.is_absolute():
+            file_path = (Path(settings.raw_data_directory).resolve() / file_path).resolve()
         
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")

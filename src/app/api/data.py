@@ -47,26 +47,31 @@ async def upload_data_file(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+def _parse_form_bool(value: str) -> bool:
+    """Parse form string to bool so frontend can send 'true'/'false' without 422."""
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in ("true", "1", "yes")
+
+
 @router.post("/process/{file_id}")
 async def process_data_file(
     file_id: int,
     algorithm: str = Form("algo6_javascript"),
-    use_force_gradient: bool = Form(False),
+    use_force_gradient: str = Form("false"),
     service = Depends(get_data_processing_service_instance)
 ):
     """Process a data file with step detection."""
     try:
-        print(f"Processing file {file_id} with algorithm {algorithm}")
-        
+        use_force_gradient_bool = _parse_form_bool(use_force_gradient)
         # Get file info
         file_info = service.get_processing_status(file_id)
-        print(f"File info: {file_info}")
         
         # Process the file
         result = service.process_accelerometer_data(
             file_path=file_info["file_path"],
             algorithm=StepDetectionAlgorithm(algorithm),
-            use_force_gradient=use_force_gradient
+            use_force_gradient=use_force_gradient_bool
         )
         
         print(f"Processing completed successfully")
