@@ -10,6 +10,13 @@ Acquisition policies are formulated for *minimisation* (we negate inside
     \\quad z = (f^* - \\mu(x)) / \\sigma(x)
 
 where :math:`f^*` is the current best (minimum) observed value.
+
+We also expose Upper Confidence Bound and Thompson Sampling (the default).
+TS draws a single joint realisation :math:`\\tilde f \\sim \\mathcal N(\\mu, \\Sigma)`
+over the candidate set and picks :math:`\\arg\\min \\tilde f`. This gives a
+calibrated explore/exploit tradeoff without requiring an explicit ``f_best``
+target, which is desirable for personalised BO where the per-participant
+f-best is empty on cold start.
 """
 
 from __future__ import annotations
@@ -21,12 +28,12 @@ from typing import Callable, Literal
 import numpy as np
 from scipy.stats import norm
 
-from .gp import GPModel, fit_gp_hyperparameters
+from .gp import GPModel, GPPosterior, fit_gp_hyperparameters
 
 logger = logging.getLogger(__name__)
 
 
-AcquisitionName = Literal["EI", "UCB"]
+AcquisitionName = Literal["EI", "UCB", "TS"]
 
 
 # ---------------------------------------------------------------------------
@@ -68,6 +75,49 @@ def upper_confidence_bound(
     return -lcb
 
 
+def thompson_sample(
+    posterior: GPPosterior,
+    *,
+    rng: np.random.Generator | None = None,
+    jitter: float = 1e-8,
+    max_jitter: float = 1.0,
+) -> np.ndarray:
+    """Draw one joint realisation from the GP posterior over the candidate set.
+
+    Returns a length-``n`` vector :math:`\\tilde f \\sim \\mathcal N(\\mu, \\Sigma)`.
+    For minimisation the chosen point is ``argmin(\\tilde f)``; for the unified
+    "higher is better" convention used by :func:`suggest_next` we expose
+    ``-\\tilde f`` as the acquisition.
+
+    Args:
+        posterior: ``GPPosterior`` with full ``cov`` matrix.
+        rng: Optional ``np.random.Generator`` for reproducibility.
+        jitter: Initial diagonal jitter added before Cholesky.
+        max_jitter: Cap on the progressive jitter (each retry multiplies by 10).
+
+    Returns:
+        ``(n,)`` sampled function values at the candidates.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    n = posterior.mean.shape[0]
+    cov = posterior.cov
+    cov = 0.5 * (cov + cov.T)  # symmetrise (numerical safety)
+    cur = jitter
+    while cur <= max_jitter:
+        try:
+            L = np.linalg.cholesky(cov + cur * np.eye(n))
+            break
+        except np.linalg.LinAlgError:
+            cur *= 10.0
+    else:
+        # Degenerate fallback: independent samples per candidate using diag.
+        sigma = np.sqrt(np.clip(posterior.var, 0.0, None))
+        return posterior.mean + sigma * rng.standard_normal(n)
+    z = rng.standard_normal(n)
+    return posterior.mean + L @ z
+
+
 def acquisition_values(
     name: AcquisitionName,
     mu: np.ndarray,
@@ -77,11 +127,22 @@ def acquisition_values(
     beta: float = 2.0,
     xi: float = 0.0,
 ) -> np.ndarray:
-    """Dispatch to a registered acquisition (always returns "higher = better")."""
+    """Dispatch to a closed-form acquisition (always returns "higher = better").
+
+    Note:
+        ``"TS"`` is *not* handled here because it requires the joint posterior
+        covariance, not just the per-candidate variance. Use :func:`suggest_next`
+        (which dispatches internally) or :func:`thompson_sample` directly.
+    """
     if name == "EI":
         return expected_improvement(f_best, mu, var, xi=xi)
     if name == "UCB":
         return upper_confidence_bound(mu, var, beta=beta)
+    if name == "TS":
+        raise ValueError(
+            "Thompson Sampling needs the full posterior covariance; call "
+            "suggest_next or thompson_sample directly."
+        )
     raise ValueError(f"Unknown acquisition {name!r}")
 
 
@@ -104,10 +165,11 @@ def suggest_next(
     x_candidates: np.ndarray,
     y_observed: np.ndarray,
     *,
-    acquisition: AcquisitionName = "EI",
+    acquisition: AcquisitionName = "TS",
     excluded_indices: set[int] | None = None,
     beta: float = 2.0,
     xi: float = 0.0,
+    rng: np.random.Generator | None = None,
 ) -> Suggestion:
     """Pick the candidate maximising the acquisition.
 
@@ -115,25 +177,36 @@ def suggest_next(
         model: Fitted :class:`GPModel`.
         x_candidates: ``(n_cand, d)`` candidate inputs (z-scored to match
             ``model.x_train``).
-        y_observed: Observed targets so far (used to compute ``f_best``).
-        acquisition: ``"EI"`` or ``"UCB"``.
+        y_observed: Observed targets so far (used to compute ``f_best`` for
+            EI). Ignored by ``"TS"`` and ``"UCB"``.
+        acquisition: ``"TS"`` (default), ``"EI"`` or ``"UCB"``.
         excluded_indices: Optional set of candidate indices to mask out (e.g.
             already-queried geometries during a simulated BO loop).
         beta: UCB exploration coefficient.
         xi: EI exploration boost.
+        rng: Optional RNG for ``"TS"`` reproducibility.
 
     Returns:
-        :class:`Suggestion`.
+        :class:`Suggestion`. ``alpha`` is always "higher = better" so
+        ``argmax(alpha)`` gives the chosen index regardless of acquisition.
+        For ``"TS"`` the returned ``alpha`` is :math:`-\\tilde f` (the negated
+        sampled function), so the magnitude reflects "how good this draw was
+        for this candidate" on the same sign convention as EI/UCB.
     """
-    if y_observed.size == 0:
-        f_best = float("inf")  # Anything looks like an improvement on iter 0
-    else:
-        f_best = float(np.min(y_observed))
-
     posterior = model.predict(x_candidates)
-    alpha = acquisition_values(
-        acquisition, posterior.mean, posterior.var, f_best=f_best, beta=beta, xi=xi
-    )
+
+    if acquisition == "TS":
+        sample = thompson_sample(posterior, rng=rng)
+        alpha = -sample  # we minimise the objective → argmax(-sample) = argmin(sample)
+    else:
+        if y_observed.size == 0:
+            f_best = float("inf")  # Anything looks like an improvement on iter 0
+        else:
+            f_best = float(np.min(y_observed))
+        alpha = acquisition_values(
+            acquisition, posterior.mean, posterior.var,
+            f_best=f_best, beta=beta, xi=xi,
+        )
 
     if excluded_indices:
         mask = np.ones(alpha.shape, dtype=bool)

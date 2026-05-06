@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from .core.config import settings
-from .api import experiments, data, optimization, bo
+from .api import experiments, data, bo
 
 # Create FastAPI application
 app = FastAPI(
@@ -35,7 +35,6 @@ app.add_middleware(
 # Include API routers
 app.include_router(experiments.router, prefix="/api/experiments", tags=["experiments"])
 app.include_router(data.router, prefix="/api/data", tags=["data"])
-app.include_router(optimization.router, prefix="/api/optimization", tags=["optimization"])
 app.include_router(bo.router, prefix="/api/bo", tags=["bo"])
 
 # Mount static files

@@ -79,12 +79,7 @@ class BOMode {
 
             const dash = document.getElementById('bo-dashboard');
             dash?.classList.remove('d-none');
-            const info = document.getElementById('bo-user-info');
-            if (info) {
-                info.textContent =
-                    `Session ${resp.session_id.slice(0, 8)} · participant ${resp.participant_mih}` +
-                    ` · pool size ${resp.n_pool_rows} · candidates ${resp.n_candidates}`;
-            }
+            this._updateUserInfo();
             // Hide downstream cards until we re-fit
             document.getElementById('bo-gp-info-card')?.classList.add('d-none');
             document.getElementById('bo-candidates-card')?.classList.add('d-none');
@@ -107,8 +102,17 @@ class BOMode {
             return;
         }
         try {
-            const resp = await this.api.boFitGP(this.session.session_id);
+            // Always send the *current* UI config so changes to mode / kernel /
+            // objective / acquisition take effect without needing to restart.
+            const cfg = this._readConfig();
+            const resp = await this.api.boFitGP(this.session.session_id, cfg);
             this.lastFit = resp;
+            // Mirror the server-side updates back onto the cached session so
+            // the dashboard header + breakdown stay in sync.
+            if (resp.config) this.session.config = resp.config;
+            if (resp.pool_breakdown) this.session.pool_breakdown = resp.pool_breakdown;
+            if (resp.n_pool_rows != null) this.session.n_pool_rows = resp.n_pool_rows;
+            this._updateUserInfo();
             this._renderGPInfo(resp);
             // Auto-call suggest so the candidates table is populated.
             await this.suggestNext();
@@ -236,23 +240,71 @@ class BOMode {
             const el = document.getElementById(id);
             if (el) el.textContent = val;
         };
+        const setHTML = (id, html) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        };
         set('bo-gp-kernel', resp.kernel);
         set('bo-gp-sigma-f', resp.theta.signal_variance.toFixed(4));
-        set('bo-gp-lengthscale', resp.theta.lengthscale.toFixed(4));
+
+        // Lengthscale: scalar (isotropic) or per-feature dict (ARD).
+        const ellsPerDim = resp.theta.lengthscales_per_dim;
+        if (resp.theta.ard && ellsPerDim) {
+            // Sort ascending so the most-relevant features appear first.
+            const sorted = Object.entries(ellsPerDim)
+                .sort((a, b) => a[1] - b[1]);
+            const minL = sorted[0][1];
+            const maxL = sorted[sorted.length - 1][1];
+            const span = Math.max(maxL - minL, 1e-9);
+            const rows = sorted.map(([feat, val]) => {
+                const frac = (val - minL) / span;            // 0 = most relevant
+                const widthPct = Math.max(4, (1 - frac) * 100);
+                return `
+                    <div class="d-flex align-items-center mb-1">
+                        <code class="me-2" style="min-width: 8em">${feat}</code>
+                        <div class="flex-grow-1 me-2"
+                             style="background:#e9ecef; height:6px; border-radius:3px; overflow:hidden">
+                            <div style="width:${widthPct}%; height:100%; background:#0d6efd"></div>
+                        </div>
+                        <span class="font-monospace" style="min-width: 5em; text-align:right">
+                            ${val.toFixed(3)}
+                        </span>
+                    </div>`;
+            }).join('');
+            setHTML('bo-gp-lengthscale',
+                `<div class="text-muted mb-1">ARD: smaller ℓ ⇒ feature is more relevant</div>${rows}`);
+        } else if (resp.theta.lengthscale != null) {
+            set('bo-gp-lengthscale', resp.theta.lengthscale.toFixed(4) + ' (isotropic)');
+        } else {
+            set('bo-gp-lengthscale', '—');
+        }
+
         set('bo-gp-sigma-n', resp.theta.noise_variance.toFixed(4));
         set('bo-gp-nll', resp.train_nll.toFixed(4));
         set('bo-gp-n-train', String(resp.n_train));
         set('bo-gp-n-cand', String(resp.n_candidates));
-        if (this.session?.pool_breakdown) {
-            const bd = this.session.pool_breakdown;
+        const bd = resp.pool_breakdown ?? this.session?.pool_breakdown;
+        if (bd) {
             const txt = Object.entries(bd).map(([k, v]) => `${k}: ${v}`).join(', ');
             set('bo-gp-pool-breakdown', txt || 'empty');
         }
     }
 
+    _updateUserInfo() {
+        const info = document.getElementById('bo-user-info');
+        if (!info || !this.session) return;
+        const sid = this.session.session_id ?? '';
+        const poolSize = this.session.n_pool_rows ?? '?';
+        const nCand = this.session.n_candidates ?? '?';
+        info.textContent =
+            `Session ${String(sid).slice(0, 8)} · participant ${this.session.participant_mih}` +
+            ` · pool size ${poolSize} · candidates ${nCand}`;
+    }
+
     _renderCandidates(resp) {
         const card = document.getElementById('bo-candidates-card');
         card?.classList.remove('d-none');
+        this._renderRationale(resp);
         const tbody = document.querySelector('#bo-candidates-table tbody');
         if (!tbody) return;
 
@@ -262,6 +314,14 @@ class BOMode {
         tbody.innerHTML = rows.map(c => {
             const isBest = c.idx === suggestedIdx;
             const cls = isBest ? 'table-warning fw-bold' : (c.excluded ? 'text-muted' : '');
+            // Distinguish auto-excluded (already measured by participant) from
+            // session-excluded (just submitted in this BO loop).
+            let visitedMark = '';
+            if (c.already_measured) {
+                visitedMark = '<span title="Already measured by this participant — auto-excluded">📊</span>';
+            } else if (c.excluded) {
+                visitedMark = '<span title="Excluded by this BO session">✓</span>';
+            }
             return `
                 <tr class="${cls}" data-idx="${c.idx}" style="cursor:pointer">
                     <td>${c.idx}</td>
@@ -271,7 +331,7 @@ class BOMode {
                     <td>${c.posterior_mean.toFixed(3)}</td>
                     <td>${c.posterior_std.toFixed(3)}</td>
                     <td>${c.acquisition_value.toFixed(4)}</td>
-                    <td>${c.excluded ? '✓' : ''}</td>
+                    <td>${visitedMark}</td>
                 </tr>
             `;
         }).join('');
@@ -293,6 +353,59 @@ class BOMode {
         document.getElementById('bo-trial-beta').value = suggested.beta;
         document.getElementById('bo-trial-gamma').value = suggested.gamma;
         this._updateCotReadout();
+    }
+
+    _renderRationale(resp) {
+        const box = document.getElementById('bo-suggest-rationale');
+        if (!box) return;
+        const r = resp.rationale;
+        if (!r) { box.classList.add('d-none'); return; }
+        box.classList.remove('d-none');
+
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        const fmt = (v, d = 4) =>
+            v == null || !Number.isFinite(v) ? '—' : Number(v).toFixed(d);
+
+        const acqLabel = r.acquisition_used === r.acquisition_requested
+            ? r.acquisition_used
+            : `${r.acquisition_used} (fallback from ${r.acquisition_requested})`;
+
+        set('bo-rationale-summary', r.summary || '');
+        set('bo-rationale-acq', acqLabel);
+        set('bo-rationale-mu', fmt(r.posterior_mean, 3));
+        set('bo-rationale-sigma', fmt(r.posterior_std, 3));
+        set('bo-rationale-fbest',
+            r.f_best == null ? 'no observations yet for this participant'
+                              : fmt(r.f_best, 3));
+        set('bo-rationale-rank',
+            `${r.rank} of ${r.n_eligible} eligible candidates`);
+
+        if (r.acquisition_used === 'TS') {
+            set('bo-rationale-decomp',
+                `f̃ ~ N(μ, Σ); chosen f̃ = ${fmt(r.sampled_value, 3)}`);
+            set('bo-rationale-exploit', fmt(r.posterior_mean, 3) + ' (μ)');
+            set('bo-rationale-explore', fmt(r.posterior_std, 3) + ' (σ)');
+        } else if (r.acquisition_used === 'EI') {
+            const decomp = r.f_best == null
+                ? 'EI undefined → max σ'
+                : `EI = (f*-μ)Φ(z) + σφ(z), z=${fmt(r.z, 3)}`;
+            set('bo-rationale-decomp', decomp);
+            set('bo-rationale-exploit', fmt(r.exploit_term));
+            set('bo-rationale-explore', fmt(r.explore_term));
+        } else if (r.acquisition_used === 'UCB') {
+            set('bo-rationale-decomp',
+                `LCB = μ - β·σ, β=${r.beta}, LCB=${fmt(r.lcb, 3)}`);
+            set('bo-rationale-exploit', fmt(r.posterior_mean, 3) + ' (μ)');
+            set('bo-rationale-explore',
+                fmt(r.beta * r.posterior_std, 3) + ' (β·σ)');
+        } else {
+            set('bo-rationale-decomp', '—');
+            set('bo-rationale-exploit', '—');
+            set('bo-rationale-explore', '—');
+        }
     }
 
     _renderHistory() {
@@ -355,7 +468,7 @@ class BOMode {
         const wCot = parseFloat(document.getElementById('bo-w-cot')?.value) || 1.0;
         const wSurvey = parseFloat(document.getElementById('bo-w-survey')?.value) || 1.0;
         const kernel = document.getElementById('bo-kernel-select')?.value || 'matern52';
-        const acquisition = document.getElementById('bo-acquisition-select')?.value || 'EI';
+        const acquisition = document.getElementById('bo-acquisition-select')?.value || 'TS';
         return { mode, objective, wCot, wSurvey, kernel, acquisition };
     }
 

@@ -14,13 +14,7 @@ def get_data_processing_service():
     from .data_processing_service import DataProcessingService
     return DataProcessingService
 
-def get_optimization_service():
-    """Lazy import for OptimizationService to avoid heavy dependency imports."""
-    from .optimization_service import OptimizationService
-    return OptimizationService
-
 __all__ = [
     "ExperimentService",
     "get_data_processing_service",
-    "get_optimization_service",
 ]

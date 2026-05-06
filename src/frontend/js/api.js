@@ -169,54 +169,12 @@ class CrutchAPI {
         return response.json();
     }
 
-    // Optimization endpoints
-    async suggestGeometry(participantId, objective, acquisitionFunction = 'EI', maxIterations = 10) {
-        const formData = new FormData();
-        formData.append('objective', objective);
-        formData.append('acquisition_function', acquisitionFunction);
-        formData.append('max_iterations', maxIterations);
-
-        const response = await fetch(`${this.baseURL}/optimization/suggest-geometry/${participantId}`, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error(`Optimization failed: ${response.status}`);
-        }
-
-        return response.json();
-    }
-
-    async getOptimizationHistory(participantId, objective = null) {
-        const endpoint = objective ?
-            `/optimization/history/${participantId}?objective=${objective}` :
-            `/optimization/history/${participantId}`;
-        return this.request(endpoint);
-    }
-
-    async getOptimizationRecommendations(participantId, objective) {
-        return this.request(`/optimization/recommendations/${participantId}?objective=${objective}`);
-    }
-
-    async compareGeometries(participantId, geometries) {
-        return this.request(`/optimization/compare-geometries/${participantId}`, 'POST', { geometries });
-    }
-
     // Utility endpoints
     async getAvailableAlgorithms() {
         return this.request('/data/algorithms');
     }
 
-    async getAcquisitionFunctions() {
-        return this.request('/optimization/acquisition-functions');
-    }
-
-    async getObjectives() {
-        return this.request('/optimization/objectives');
-    }
-
-    async getHealthStatus() {
+    async getAvailableAlgorithms() {
         return this.request('/health');
     }
 
@@ -243,8 +201,17 @@ class CrutchAPI {
         });
     }
 
-    async boFitGP(sessionId) {
-        return this.request('/bo/fit-gp', 'POST', { session_id: sessionId });
+    async boFitGP(sessionId, cfg = null) {
+        const body = { session_id: sessionId };
+        if (cfg) {
+            if (cfg.mode != null) body.mode = cfg.mode;
+            if (cfg.objective != null) body.objective = cfg.objective;
+            if (cfg.wCot != null) body.w_cot = cfg.wCot;
+            if (cfg.wSurvey != null) body.w_survey = cfg.wSurvey;
+            if (cfg.kernel != null) body.kernel = cfg.kernel;
+            if (cfg.acquisition != null) body.acquisition = cfg.acquisition;
+        }
+        return this.request('/bo/fit-gp', 'POST', body);
     }
 
     async boSuggestNext(sessionId, { topK = 5, excludeIndices = null } = {}) {

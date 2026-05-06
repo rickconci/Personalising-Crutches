@@ -721,16 +721,22 @@
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Acquisition</label>
                                 <select id="bo-acquisition-select" class="form-select">
-                                    <option value="EI" selected>Expected Improvement (EI)</option>
+                                    <option value="TS" selected>Thompson Sampling (TS) — recommended</option>
+                                    <option value="EI">Expected Improvement (EI)</option>
                                     <option value="UCB">Upper Confidence Bound (UCB)</option>
                                 </select>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label fw-bold">Kernel</label>
                                 <select id="bo-kernel-select" class="form-select">
-                                    <option value="matern52" selected>Matern-5/2</option>
-                                    <option value="rbf">RBF</option>
+                                    <option value="matern52" selected>Matern-5/2 (isotropic)</option>
+                                    <option value="rbf">RBF (isotropic)</option>
+                                    <option value="matern52_ard">Matern-5/2 + ARD (per-feature ℓ)</option>
+                                    <option value="rbf_ard">RBF + ARD (per-feature ℓ)</option>
                                 </select>
+                                <small class="text-muted d-block mt-1">
+                                    ARD fits one lengthscale per input feature; smaller ℓ ⇒ more relevant.
+                                </small>
                             </div>
                         </div>
 
@@ -754,7 +760,10 @@
                                     <tbody>
                                         <tr><th>Kernel</th><td id="bo-gp-kernel">-</td></tr>
                                         <tr><th>Signal variance σ²_f</th><td id="bo-gp-sigma-f">-</td></tr>
-                                        <tr><th>Lengthscale ℓ</th><td id="bo-gp-lengthscale">-</td></tr>
+                                        <tr>
+                                            <th>Lengthscale ℓ</th>
+                                            <td id="bo-gp-lengthscale" class="small">-</td>
+                                        </tr>
                                         <tr><th>Noise variance σ²_n</th><td id="bo-gp-sigma-n">-</td></tr>
                                     </tbody>
                                 </table>
@@ -782,6 +791,36 @@
                         </button>
                     </div>
                     <div class="card-body">
+                        <!-- Why this candidate? -->
+                        <div id="bo-suggest-rationale" class="alert alert-info small mb-3 d-none">
+                            <div class="fw-bold mb-1">
+                                <i class="fas fa-circle-question me-1"></i>Why this candidate?
+                            </div>
+                            <div id="bo-rationale-summary" class="mb-2"></div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <table class="table table-sm table-borderless mb-0">
+                                        <tbody>
+                                            <tr><th class="text-muted small">Acquisition</th><td id="bo-rationale-acq">-</td></tr>
+                                            <tr><th class="text-muted small">Posterior μ</th><td id="bo-rationale-mu">-</td></tr>
+                                            <tr><th class="text-muted small">Posterior σ</th><td id="bo-rationale-sigma">-</td></tr>
+                                            <tr><th class="text-muted small">Participant f*</th><td id="bo-rationale-fbest">-</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="col-md-6">
+                                    <table class="table table-sm table-borderless mb-0">
+                                        <tbody>
+                                            <tr><th class="text-muted small">Decomposition</th><td id="bo-rationale-decomp" class="font-monospace small">-</td></tr>
+                                            <tr><th class="text-muted small">Exploit term</th><td id="bo-rationale-exploit">-</td></tr>
+                                            <tr><th class="text-muted small">Explore term</th><td id="bo-rationale-explore">-</td></tr>
+                                            <tr><th class="text-muted small">Rank</th><td id="bo-rationale-rank">-</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                             <table class="table table-sm table-hover mb-0" id="bo-candidates-table">
                                 <thead class="table-light sticky-top">
