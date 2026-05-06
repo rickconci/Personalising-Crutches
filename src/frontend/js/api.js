@@ -219,6 +219,63 @@ class CrutchAPI {
     async getHealthStatus() {
         return this.request('/health');
     }
+
+    // ----------------------------------------------------------------------
+    // Personalised Bayesian Optimisation (new pipeline)
+    // ----------------------------------------------------------------------
+    async boGetParticipants() {
+        return this.request('/bo/participants');
+    }
+
+    async boGetCandidateGrid() {
+        return this.request('/bo/candidate-grid');
+    }
+
+    async boStartSession({ participantMih, mode, objective, wCot, wSurvey, kernel, acquisition }) {
+        return this.request('/bo/start-session', 'POST', {
+            participant_mih: participantMih,
+            mode,
+            objective,
+            w_cot: wCot,
+            w_survey: wSurvey,
+            kernel,
+            acquisition,
+        });
+    }
+
+    async boFitGP(sessionId) {
+        return this.request('/bo/fit-gp', 'POST', { session_id: sessionId });
+    }
+
+    async boSuggestNext(sessionId, { topK = 5, excludeIndices = null } = {}) {
+        return this.request('/bo/suggest-next', 'POST', {
+            session_id: sessionId,
+            top_k: topK,
+            exclude_indices: excludeIndices,
+        });
+    }
+
+    async boSubmitObservation(sessionId, { alpha, beta, gamma, metabolicPower, walkingTime, distance, survey }) {
+        return this.request('/bo/submit-observation', 'POST', {
+            session_id: sessionId,
+            alpha,
+            beta,
+            gamma,
+            metabolic_power_W_per_kg: metabolicPower,
+            walking_time_s: walkingTime,
+            distance_m: distance,
+            survey,
+        });
+    }
+
+    async boGetSession(sessionId) {
+        return this.request(`/bo/session/${sessionId}`);
+    }
+
+    async boGetInsights({ objective = 'combined', wCot = 1.0, wSurvey = 1.0 } = {}) {
+        const qs = `?objective=${encodeURIComponent(objective)}&w_cot=${wCot}&w_survey=${wSurvey}`;
+        return this.request(`/bo/insights${qs}`);
+    }
 }
 
 // Create global API instance

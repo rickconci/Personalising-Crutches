@@ -676,7 +676,7 @@ if __name__ == "__main__":
     core_data_path = Path("/Users/riccardoconci/Local_documents/!CURRENT_RESEARCH/Personalising-Crutches/data_V2/raw/")
     #file_path_MIH27 = core_data_path / 'MIH27' / '2025-10-07' / 'Metabolics'/'Metabolics_MH27.csv'
     #file_path_MIH15 = core_data_path / 'MIH15' / '2025-10-21' / 'Metabolics'/'TEST_NO_1159.csv'
-    file_path_MIH01 = core_data_path / 'MIH01' / '2025-10-15' / 'metabolics' / 'TEST_NO_1108.csv'
+    file_path_MIH01 = core_data_path / 'MIH01' / '2025-10-15_GridSearch' / 'metabolics' / 'TEST_NO_1108.csv'
     
     file_path_list = [file_path_MIH01]
     for file_path in file_path_list:

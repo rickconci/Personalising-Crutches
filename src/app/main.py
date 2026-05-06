@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 from .core.config import settings
-from .api import experiments, data, optimization
+from .api import experiments, data, optimization, bo
 
 # Create FastAPI application
 app = FastAPI(
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(experiments.router, prefix="/api/experiments", tags=["experiments"])
 app.include_router(data.router, prefix="/api/data", tags=["data"])
 app.include_router(optimization.router, prefix="/api/optimization", tags=["optimization"])
+app.include_router(bo.router, prefix="/api/bo", tags=["bo"])
 
 # Mount static files
 frontend_path = Path(__file__).parent.parent / "frontend"

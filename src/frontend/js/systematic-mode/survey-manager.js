@@ -10,19 +10,21 @@ export class SurveyManager {
 
     /**
      * Collect survey responses from the DOM
+     * @param {string} [containerId='survey-sections'] - id of the parent element
+     *     containing the SUS / NRS / TLX selects. Lets the same SurveyManager
+     *     drive both the systematic-mode survey and the BO-mode survey.
      * @returns {Object} - Survey responses with calculated scores
      */
-    collectSurveyResponses() {
+    collectSurveyResponses(containerId = 'survey-sections') {
         const surveyResponses = {};
 
-        // Scope queries to the systematic mode survey section only
-        const surveySection = document.getElementById('survey-sections');
+        const surveySection = document.getElementById(containerId);
         if (!surveySection) {
-            console.error('Survey section not found');
+            console.error(`Survey section '${containerId}' not found`);
             return surveyResponses;
         }
 
-        // SUS Score Calculation (6 questions in systematic mode)
+        // SUS Score Calculation (6 questions)
         const susQuestions = surveySection.querySelectorAll('.sus-question');
         let susScore = 0;
         susQuestions.forEach((q, index) => {
@@ -35,12 +37,12 @@ export class SurveyManager {
                 susScore += (5 - value);
             }
         });
-        surveyResponses['sus_score'] = (susScore / 24) * 100; // Normalize to 0-100 (6 questions × 4 = 24)
+        surveyResponses['sus_score'] = (susScore / 24) * 100;
 
-        console.log(`SUS: ${susQuestions.length} questions, raw score: ${susScore}, normalized: ${surveyResponses['sus_score']}`);
+        console.log(`[${containerId}] SUS: ${susQuestions.length} qs, raw=${susScore}, norm=${surveyResponses['sus_score']}`);
 
-        // NRS Score
-        const nrsScoreElement = document.getElementById('nrs-score');
+        // NRS Score (scoped to container; matches `.nrs-score`)
+        const nrsScoreElement = surveySection.querySelector('.nrs-score');
         if (nrsScoreElement) {
             surveyResponses['nrs_score'] = parseInt(nrsScoreElement.value);
         }
@@ -54,24 +56,15 @@ export class SurveyManager {
             if (index < tlxFieldNames.length) {
                 surveyResponses[tlxFieldNames[index]] = value;
             }
-
-            // Flip performance so that high performance = low workload
             if (tlxFieldNames[index] === 'tlx_performance') {
                 tlxScore += (20 - value);
             } else {
                 tlxScore += value;
             }
         });
-        surveyResponses['tlx_score'] = tlxScore / 5; // Mean of all dimensions (0-20 scale)
+        surveyResponses['tlx_score'] = tlxScore / 5;
 
-        console.log(`TLX: ${tlxQuestions.length} questions, mean score: ${surveyResponses['tlx_score']}`);
-        console.log('TLX breakdown:', {
-            mental_demand: surveyResponses['tlx_mental_demand'],
-            physical_demand: surveyResponses['tlx_physical_demand'],
-            performance: surveyResponses['tlx_performance'],
-            effort: surveyResponses['tlx_effort'],
-            frustration: surveyResponses['tlx_frustration']
-        });
+        console.log(`[${containerId}] TLX: mean=${surveyResponses['tlx_score']}`);
 
         return surveyResponses;
     }
@@ -194,55 +187,45 @@ export class SurveyManager {
     }
 
     /**
-     * Reset survey forms to default values
+     * Reset survey forms (scoped to a container) to default values.
+     * @param {string} [containerId='survey-sections']
      */
-    resetSurveyForms() {
-        // Reset SUS questions
-        const susQuestions = document.querySelectorAll('.sus-question');
-        susQuestions.forEach(q => q.value = '3');
+    resetSurveyForms(containerId = 'survey-sections') {
+        const container = document.getElementById(containerId) || document;
 
-        // Reset NRS score
-        const nrsScore = document.getElementById('nrs-score');
+        container.querySelectorAll('.sus-question').forEach(q => q.value = '3');
+        const nrsScore = container.querySelector('.nrs-score');
         if (nrsScore) nrsScore.value = '5';
+        container.querySelectorAll('.tlx-question').forEach(q => q.value = '10');
 
-        // Reset TLX questions
-        const tlxQuestions = document.querySelectorAll('.tlx-question');
-        tlxQuestions.forEach(q => q.value = '10');
-
-        // Reset metabolic cost
-        const metabolicCostInput = document.getElementById('metabolic-cost-input');
-        if (metabolicCostInput) metabolicCostInput.value = '';
+        // Metabolic cost only exists on the systematic survey
+        if (container === document || container.id === 'survey-sections') {
+            const metabolicCostInput = document.getElementById('metabolic-cost-input');
+            if (metabolicCostInput) metabolicCostInput.value = '';
+        }
     }
 
     /**
-     * Validate survey responses
+     * Validate survey responses are present (scoped to a container).
+     * @param {string} [containerId='survey-sections']
      * @returns {Object} - Validation result {valid: boolean, errors: Array}
      */
-    validateSurveyResponses() {
+    validateSurveyResponses(containerId = 'survey-sections') {
+        const container = document.getElementById(containerId) || document;
         const errors = [];
 
-        // Check SUS questions
-        const susQuestions = document.querySelectorAll('.sus-question');
-        if (susQuestions.length === 0) {
+        if (container.querySelectorAll('.sus-question').length === 0) {
             errors.push('SUS questions not found');
         }
-
-        // Check NRS score
-        const nrsScore = document.getElementById('nrs-score');
+        const nrsScore = container.querySelector('.nrs-score');
         if (!nrsScore || !nrsScore.value) {
             errors.push('NRS score is required');
         }
-
-        // Check TLX questions
-        const tlxQuestions = document.querySelectorAll('.tlx-question');
-        if (tlxQuestions.length === 0) {
+        if (container.querySelectorAll('.tlx-question').length === 0) {
             errors.push('TLX questions not found');
         }
 
-        return {
-            valid: errors.length === 0,
-            errors: errors
-        };
+        return { valid: errors.length === 0, errors };
     }
 
     /**

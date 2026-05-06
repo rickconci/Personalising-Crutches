@@ -20,7 +20,7 @@ class CrutchApp {
             ui: null,
             device: null,
             systematic: null,
-            optimization: null
+            bo: null,
         };
 
         this.elements = this._getElements();
@@ -44,10 +44,15 @@ class CrutchApp {
                 this.modules.device
             );
 
-            this.modules.optimization = new OptimizationManager(
-                this.modules.api,
-                this.modules.ui
-            );
+            // Personalised BO mode (loaded as ES module — class is on window.BOMode)
+            if (typeof window.BOMode === 'function') {
+                this.modules.bo = new window.BOMode(
+                    this.modules.api,
+                    this.modules.ui
+                );
+            } else {
+                console.warn('BOMode not yet on window when CrutchApp initialised');
+            }
 
             // Load initial data and setup UI
             await this._loadInitialData();
@@ -59,7 +64,7 @@ class CrutchApp {
 
             // Expose modules globally for backward compatibility
             window.systematicMode = this.modules.systematic;
-            window.optimizationManager = this.modules.optimization;
+            window.boMode = this.modules.bo;
 
         } catch (error) {
             console.error('Failed to initialize app:', error);
@@ -131,12 +136,24 @@ class CrutchApp {
             this._deleteCurrentParticipant();
         });
 
-        // BO objective selection
-        document.querySelectorAll('.bo-objective-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const objective = e.target.dataset.objective;
-                this._startBOObjective(objective);
-            });
+        document.getElementById('bo-delete-participant-btn')?.addEventListener('click', () => {
+            this._deleteCurrentParticipant();
+        });
+
+        // BO Start Session button -> kick off /api/bo/start-session for the
+        // currently-selected MIH and reveal the dashboard.
+        document.getElementById('start-bo-btn')?.addEventListener('click', () => {
+            const select = document.getElementById('bo-participant-select');
+            const mih = select?.value;
+            if (this.modules.bo) {
+                this.modules.bo.start(mih);
+            }
+        });
+
+        // Track the BO participant select so the delete button gets enabled
+        // once a participant is chosen.
+        document.getElementById('bo-participant-select')?.addEventListener('change', (e) => {
+            this._onBOParticipantSelected(e.target.value);
         });
 
         // Connect device button (systematic mode)
@@ -162,12 +179,18 @@ class CrutchApp {
 
         // Initialize mode-specific functionality
         if (mode === 'systematic') {
-            // If we have a current participant, initialize systematic mode with them
             if (this.state.currentParticipant) {
                 await this.modules.systematic.initialize(this.state.currentParticipant);
             }
         } else if (mode === 'bo') {
-            // BO mode setup is handled by the OptimizationManager module
+            // Refresh the MIH-keyed BO participant select; immediately load the
+            // initial cross-participant insight figures so the dashboard isn't
+            // empty before the user starts a session.
+            if (this.modules.bo) {
+                await this.modules.bo.populateParticipantSelect();
+                this.modules.bo.refreshInsights().catch(err =>
+                    console.warn('Initial insights refresh failed:', err));
+            }
         }
 
         this.modules.ui.showNotification(`Switched to ${mode} mode`, 'success');
@@ -202,36 +225,47 @@ class CrutchApp {
      * Return to mode selection screen
      */
     _returnToModeSelection() {
-        // Clean up any active sessions
-        if (this.state.mode === 'bo' && this.modules.optimization.isAnyOptimizationActive()) {
-            const activeType = this.modules.optimization.getActiveOptimizationType();
-            this.modules.optimization.exitOptimization(activeType);
-        }
-
         this.state.mode = null;
         this.state.currentParticipant = null;
         this._showScreen('modeSelection');
     }
 
     /**
-     * Update all participant select elements
+     * Update the systematic-mode participant select with the DB participant
+     * list. The BO participant select is populated separately by
+     * BOMode.populateParticipantSelect from /api/bo/participants.
      * @private
      */
     _updateParticipantSelects() {
-        const selects = [
-            document.getElementById('participant-select'),
-            document.getElementById('bo-participant-select')
-        ].filter(select => select); // Remove null elements
-
-        selects.forEach(select => {
-            select.innerHTML = '<option value="">Select a participant...</option>';
-            this.state.participants.forEach(participant => {
-                const option = document.createElement('option');
-                option.value = participant.id;
-                option.textContent = participant.name;
-                select.appendChild(option);
-            });
+        const select = document.getElementById('participant-select');
+        if (!select) return;
+        select.innerHTML = '<option value="">Select a participant...</option>';
+        this.state.participants.forEach(participant => {
+            const option = document.createElement('option');
+            option.value = participant.id;
+            option.textContent = participant.name;
+            select.appendChild(option);
         });
+    }
+
+    /**
+     * BO participant select handler — enables the Delete button and remembers
+     * which MIH-keyed participant is currently chosen for this session. The
+     * actual session-start happens when the user clicks "Start Session".
+     * @param {string} mih - MIH id (e.g. "MIH3") or empty string.
+     * @private
+     */
+    _onBOParticipantSelected(mih) {
+        const deleteBtn = document.getElementById('bo-delete-participant-btn');
+        if (deleteBtn) deleteBtn.disabled = !mih;
+        if (!mih) {
+            this.state.currentParticipant = null;
+            return;
+        }
+        // Best-effort match against the DB participants list so legacy code
+        // that reads currentParticipant continues to work for delete.
+        const match = this.state.participants.find(p => p.name === mih);
+        this.state.currentParticipant = match || { name: mih };
     }
 
     /**
@@ -338,6 +372,12 @@ class CrutchApp {
             const newParticipant = await this.modules.api.createParticipant(participantData);
             this.state.participants.push(newParticipant);
             this._updateParticipantSelects();
+            // Keep the BO participant list in sync — it pulls from a separate
+            // endpoint that joins the JSON pool with DB.
+            if (this.modules.bo) {
+                this.modules.bo.populateParticipantSelect().catch(err =>
+                    console.warn('BO participant refresh failed:', err));
+            }
 
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('create-participant-modal'));
@@ -384,6 +424,10 @@ class CrutchApp {
 
             // Update UI
             this._updateParticipantSelects();
+            if (this.modules.bo) {
+                this.modules.bo.populateParticipantSelect().catch(err =>
+                    console.warn('BO participant refresh failed:', err));
+            }
             this.state.currentParticipant = null;
 
             // Reset participant selects
@@ -401,36 +445,6 @@ class CrutchApp {
 
         } catch (error) {
             this.modules.ui.showNotification(`Failed to delete participant: ${error.message}`, 'danger');
-        }
-    }
-
-    /**
-     * Start BO objective workflow
-     * @param {string} objective - Objective type ('pain', 'effort', 'instability')
-     * @private
-     */
-    async _startBOObjective(objective) {
-        if (!this.state.currentParticipant) {
-            this.modules.ui.showNotification('Please select a participant first', 'warning');
-            return;
-        }
-
-        try {
-            switch (objective) {
-                case 'pain':
-                    await this.modules.optimization.startPainOptimization(this.state.currentParticipant.id);
-                    break;
-                case 'effort':
-                    await this.modules.optimization.startEffortOptimization(this.state.currentParticipant.id);
-                    break;
-                case 'instability':
-                    await this.modules.optimization.startInstabilityOptimization(this.state.currentParticipant.id);
-                    break;
-                default:
-                    this.modules.ui.showNotification('Unknown objective type', 'danger');
-            }
-        } catch (error) {
-            this.modules.ui.showNotification(`Failed to start ${objective} optimization: ${error.message}`, 'danger');
         }
     }
 

@@ -256,12 +256,18 @@ class DeviceManager {
             const newPackets = this.packetParser.parse();
 
             if (newPackets.length > 0) {
-                // Add timestamp to each packet and store in buffer
-                // Use 5ms intervals (200 Hz sampling rate) like V1
+                // Stamp each packet with a synthetic time (ms since recording
+                // start) derived from the sample index. Empirically the BLE
+                // notify rate is ~100 Hz (10 ms / sample), verified against
+                // recordings whose real walking duration is known. The
+                // previous value of 5 ms (assumed 200 Hz) made every recorded
+                // duration half its true value -- see
+                // src/metabolics/imu.py::DEFAULT_SAMPLE_RATE_HZ.
+                const SAMPLE_PERIOD_MS = 10;
                 for (let i = 0; i < newPackets.length; i++) {
                     const packet = newPackets[i];
                     const dataPoint = {
-                        acc_x_time: this.sampleCounter * 5, // 5ms intervals, matches V1 backend
+                        acc_x_time: this.sampleCounter * SAMPLE_PERIOD_MS,
                         acc_x_data: packet.accX,
                         acc_z_data: packet.accY, // Map accY to acc_z_data
                         force: packet.force
